@@ -1,0 +1,77 @@
+--- a/src/db.js
++++ b/src/db.js
+@@ -1,6 +1,8 @@
+ import { xf, exists, equals } from './functions.js';
+ import { models } from './models/models.js';
+ import { Sound } from './sound.js';
+ import { idb } from './storage/idb.js';
++import { fileHandler } from './file.js';
++import { uuid } from './storage/uuid.js';
+ import { ControlMode, } from './ble/enums.js';
+ import { TimerStatus, } from './activity/enums.js';
+ 
+@@ -342,7 +344,50 @@
+ xf.sub('ui:activity:upload:by:id', (id) => {
+     models.activity.upload(id);
+ });
+-// download the current activity as a .fit file
+-xf.reg('ui:activity:save', (_, db) => {
+-    xf.dispatch(`ui:page-set`, 'workouts');
+-});
++// download the current activity as a .fit file
++xf.reg('ui:activity:save', async (_, db) => {
++    try {
++        // Check if we have records to save
++        if (db.records.length === 0) {
++            console.warn('No records to save. Make sure you have recorded some data.');
++            xf.dispatch(`ui:page-set`, 'workouts');
++            return;
++        }
++        
++        // Check if activity was already created by watch:stopped
++        const lastActivity = db.activity[0];
++        let blob, fileName;
++        
++        if (lastActivity && lastActivity.timestamp > Date.now() - 5000) {
++            // Activity was recently created, use it
++            const record = await idb.get('activity', lastActivity.id);
++            blob = record.blob;
++            fileName = models.activity.fileName(lastActivity.timestamp);
++        } else {
++            // Create new activity
++            const id = uuid();
++            blob = fileHandler.toBlob(models.activity.encode(db));
++            const name = db.workout?.meta?.name ?? 'Powered by Auuki workout';
++            fileName = models.activity.fileName(Date.now());
++
++            const summary = {
++                id,
++                timestamp: Date.now(),
++                name,
++                duration: db.elapsed ?? 0,
++                status: {strava: 'none', intervals: 'none', trainingPeaks: 'none'},
++            };
++            const record = {
++                id,
++                blob,
++                summary,
++            };
++
++            // Save to database
++            models.activity.add(summary, db.activity);
++            await idb.put('activity', record);
++            xf.dispatch('activity:add', summary);
++        }
++        
++        // Download the file
++        fileHandler.download()(blob, fileName, fileHandler.Type.OctetStream);
++        xf.dispatch(`ui:page-set`, 'workouts');
++    } catch (err) {
++        console.error(`Error downloading activity: `, err);
++        // Still navigate to workouts page even if download fails
++        xf.dispatch(`ui:page-set`, 'workouts');
++    }
++});
+ 
+ xf.reg('course:index', (index, index, db) => {
+     db.courseIndex = index;

@@ -1,6 +1,6 @@
 
 class Config {
-    #defaultStravaClientId = 0;
+    #defaultStravaClientId = '162530';
     #defaultIntervalsClientId = 0;
     #defaultTrainingPeaksClientId = 0;
 

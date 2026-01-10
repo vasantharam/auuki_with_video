@@ -298,79 +298,16 @@
                         </div>
 
                         <div id="targets">
-                            <div class="targets--cont">
-                                <div class="tab-btn-group">
-                                    <div id="mode-selector" class="mode-selector">
-                                        <tab-btn id="erg-mode-btn"
-                                                class="mode active"
-                                                prop="mode"
-                                                effect="mode-set"
-                                                param="erg">ERG</tab-btn>
-                                        <tab-btn id="resistance-mode-btn"
-                                                class="mode"
-                                                prop="mode"
-                                                effect="mode-set"
-                                                param="resistance">Resistance</tab-btn>
-                                        <tab-btn id="slope-mode-btn"
-                                                class="mode"
-                                                prop="mode"
-                                                effect="mode-set"
-                                                 param="sim">Slope</tab-btn>
-                                        <mode-lock-toggle>
-                                            <svg class="mode-lock--toggle--icon" width="24" height="24">
-                                                <use href="#icon--lock--open"/>
-                                            </svg>
-                                        </mode-lock-toggle>
-                                    </div> <!-- end mode selector -->
-                                </div> <!-- tab-btn-group -->
-
-                                <tab-group prop="mode">
-                                    <div id="erg-mode-controls" class="tab active mode-controls" tab="erg">
-                                        <power-target-control id="power-control-btn" class="number-btn">
-                                            <div class="number-input">
-                                                <button id="power-target-dec"
-                                                        class="number-input--dec number-input--btn btn">-</button>
-                                                <input id="power-target-input"
-                                                       class="number-input--value"
-                                                       type="number"
-                                                       value="0"
-                                                       autocomplete="off"/>
-                                                <button id="power-target-inc"
-                                                        class="number-input--inc number-input--btn btn">+</button>
-                                            </div>
-                                        </power-target-control>
-                                    </div> <!-- end erg mode -->
-                                    <div id="resistance-mode-controls" class="tab mode-controls" tab="resistance">
-                                        <resistance-target-control id="resistance-control-btn" class="number-btn">
-                                            <div class="number-input">
-                                                <button id="resistance-target-dec"
-                                                        class="number-input--dec number-input--btn btn">-</button>
-                                                <input id="resistance-target-input"
-                                                       class="number-input--value input"
-                                                       type="number"
-                                                       value="0"
-                                                       autocomplete="off" />
-                                                <button id="resistance-target-inc"
-                                                        class="number-input--inc number-input--btn btn">+</button>
-                                            </div>
-                                        </resistance-target-control>
-                                    </div> <!-- end resistance mode -->
-                                    <div id="slope-mode-controls" class="tab mode-controls" tab="sim">
-                                        <slope-target-control id="slope-control-btn" class="number-btn">
-                                            <div class="number-input">
-                                                <button id="slope-target-dec"
-                                                        class="number-input--dec number-input--btn btn">-</button>
-                                                <input id="slope-target-input"
-                                                       class="number-input--value input"
-                                                       type="number"
-                                                       value="0"
-                                                       autocomplete="off" />
-                                                <button id="slope-target-inc"
-                                                        class="number-input--inc number-input--btn btn">+</button>
-                                            </div>
-                                        </slope-target-control>
-                                    </div> <!-- end slope mode -->
-                                </tab-group>
+                            <div class="targets--cont video-target">
+                                <div id="home-hero-video" class="home-hero">
+                                    <video class="home-hero--video"
+                                           src="about:blank"
+                                           autoplay
+                                           muted
+                                           playsinline>
+                                        Your browser does not support the video tag.
+                                    </video>
+                                </div>
                             </div> <!-- end targets--cont -->
                         </div> <!-- end targets -->
                 </div> <!-- end home-page-wrapper -->

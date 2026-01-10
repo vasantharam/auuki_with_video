@@ -2,8 +2,6 @@ import { xf, exists, equals } from './functions.js';
 import { models } from './models/models.js';
 import { Sound } from './sound.js';
 import { idb } from './storage/idb.js';
-import { fileHandler } from './file.js';
-import { uuid } from './storage/uuid.js';
 import { ControlMode, } from './ble/enums.js';
 import { TimerStatus, } from './activity/enums.js';
 

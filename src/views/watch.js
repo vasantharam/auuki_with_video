@@ -3,6 +3,21 @@ import { xf } from '../functions.js';
 class Watch extends HTMLElement {
     constructor() {
         super();
+
+        // Bind handlers so `this` inside callbacks points to the custom element
+        this.onStart = this.onStart.bind(this);
+        this.onPause = this.onPause.bind(this);
+        this.onBack = this.onBack.bind(this);
+        this.onLap = this.onLap.bind(this);
+        this.onStop = this.onStop.bind(this);
+        this.onSave = this.onSave.bind(this);
+        this.onWorkoutStart = this.onWorkoutStart.bind(this);
+        this.onWatchStatus = this.onWatchStatus.bind(this);
+        this.onWorkoutStatus = this.onWorkoutStatus.bind(this);
+        this.onCadence = this.onCadence.bind(this);
+        this.onPower1s = this.onPower1s.bind(this);
+        this.onHeartRate = this.onHeartRate.bind(this);
+        this.onVideoEnded = this.onVideoEnded.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -19,6 +34,13 @@ class Watch extends HTMLElement {
             // workout: document.querySelector('#start-workout'),
         };
 
+        this.cadence = 0;
+        this.power1s = 0;
+        this.heartRate = 0;
+        this.videoSources = [];
+        this.videoIndex = 0;
+        this.currentMultiplier = 1;
+
         this.dom.start.addEventListener('pointerup', this.onStart, this.signal);
         this.dom.pause.addEventListener('pointerup', this.onPause, this.signal);
         this.dom.back.addEventListener('pointerup', this.onBack, this.signal);
@@ -31,6 +53,17 @@ class Watch extends HTMLElement {
 
         xf.sub(`db:watchStatus`, this.onWatchStatus.bind(this), this.signal);
         xf.sub(`db:workoutStatus`, this.onWorkoutStatus.bind(this), this.signal);
+        xf.sub(`db:cadence`, this.onCadence.bind(this), this.signal);
+        xf.sub(`db:power1s`, this.onPower1s.bind(this), this.signal);
+        xf.sub(`db:heartRate`, this.onHeartRate.bind(this), this.signal);
+
+        const heroVideo = document.querySelector('#home-hero-video');
+        const videoEl = heroVideo?.querySelector('video');
+        if (heroVideo && videoEl) {
+            videoEl.addEventListener('ended', this.onVideoEnded.bind(this), this.signal);
+        }
+
+        this.loadVideoManifest();
     }
     disconnectedCallback() {
         this.abortController.abort();
@@ -38,11 +71,36 @@ class Watch extends HTMLElement {
     onStart(e) {
         xf.dispatch('ui:watchStart');
         xf.dispatch('ui:workoutStart');
+        const heroVideo = document.querySelector('#home-hero-video');
+        const videoEl = heroVideo?.querySelector('video');
+        if (heroVideo && videoEl && this.videoSources.length > 0) {
+            heroVideo.classList.add('active');
+            this.ensureVideoSource(videoEl);
+            videoEl.currentTime = 0;
+            videoEl.playbackRate = this.getPlaybackRate();
+            videoEl.play();
+        }
     }
-    onPause(e) { xf.dispatch('ui:watchPause'); }
+    onPause(e) {
+        xf.dispatch('ui:watchPause');
+        const heroVideo = document.querySelector('#home-hero-video');
+        const videoEl = heroVideo?.querySelector('video');
+        if (heroVideo && videoEl) {
+            videoEl.pause();
+        }
+    }
     onBack(e)  { xf.dispatch('ui:watchBack'); }
     onLap(e)   { xf.dispatch('ui:watchLap'); }
-    onStop(e)  { xf.dispatch('ui:watchStop'); }
+    onStop(e)  {
+        xf.dispatch('ui:watchStop');
+        const heroVideo = document.querySelector('#home-hero-video');
+        const videoEl = heroVideo?.querySelector('video');
+        if (heroVideo && videoEl) {
+            videoEl.pause();
+            videoEl.currentTime = 0;
+            heroVideo.classList.remove('active');
+        }
+    }
     onSave(e)  { xf.dispatch('ui:activity:save'); }
     onWorkoutStart(e) { xf.dispatch('ui:workoutStart'); }
     onWatchStatus(status) {
@@ -89,6 +147,91 @@ class Watch extends HTMLElement {
     renderWorkoutStarted(dom) {
         // dom.workout.style.display = 'none';
     };
+    onCadence(cadence) {
+        this.cadence = cadence;
+        this.updatePlaybackRate();
+    }
+    onPower1s(power) {
+        this.power1s = power;
+        this.updatePlaybackRate();
+    }
+    onHeartRate(heartRate) {
+        this.heartRate = heartRate;
+        this.updatePlaybackRate();
+    }
+    async loadVideoManifest() {
+        try {
+            const res = await fetch('/videos/files.csv');
+            if(!res.ok) return;
+            const text = await res.text();
+            const entries = text
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#'))
+                .map(line => line.split(',').map(x => x.trim()))
+                .map(([file, multiplier]) => ({
+                    src: `/videos/${file}`,
+                    multiplier: isNaN(parseFloat(multiplier)) ? 1 : parseFloat(multiplier),
+                }))
+                .filter(entry => entry.src && entry.src.endsWith('.mp4'));
+            if(entries.length > 0) {
+                this.videoSources = entries;
+                this.videoIndex = 0;
+                this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                const heroVideo = document.querySelector('#home-hero-video');
+                const videoEl = heroVideo?.querySelector('video');
+                if (heroVideo && videoEl) {
+                    this.ensureVideoSource(videoEl);
+                }
+            }
+        } catch(e) {
+            console.error('Error loading video manifest', e);
+        }
+    }
+    onVideoEnded() {
+        const heroVideo = document.querySelector('#home-hero-video');
+        const videoEl = heroVideo?.querySelector('video');
+        if (heroVideo && videoEl && this.videoSources.length > 0) {
+            this.videoIndex = (this.videoIndex + 1) % this.videoSources.length;
+            this.ensureVideoSource(videoEl);
+            videoEl.currentTime = 0;
+            videoEl.playbackRate = this.getPlaybackRate();
+            videoEl.play();
+        }
+    }
+    ensureVideoSource(videoEl) {
+        const entry = this.videoSources[this.videoIndex];
+        if (!entry) return;
+        this.currentMultiplier = entry.multiplier ?? 1;
+        if (videoEl.getAttribute('src') !== entry.src) {
+            videoEl.setAttribute('src', entry.src);
+            videoEl.load();
+        }
+    }
+    getPlaybackRate() {
+        const Pthr = 195;
+        const HRrest = 50;
+        const HRmax = 173;
+        const wp = 0.5;
+        const wh = 0.4;
+        const wc = 0.2;
+
+        const pNorm = this.power1s / Pthr;
+        const hNorm = (this.heartRate - HRrest) / (HRmax - HRrest);
+        const cNorm = this.cadence / 50;
+
+        const effort = (wp * pNorm) + (wh * hNorm) + (wc * cNorm);
+        const rate = effort * (this.currentMultiplier ?? 1);
+        const clamped = Math.max(0.3, Math.min(5, rate));
+        return clamped;
+    }
+    updatePlaybackRate() {
+        const heroVideo = document.querySelector('#home-hero-video');
+        const videoEl = heroVideo?.querySelector('video');
+        if (heroVideo && videoEl) {
+            videoEl.playbackRate = this.getPlaybackRate();
+        }
+    }
 }
 
 customElements.define('watch-control', Watch);
