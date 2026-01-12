@@ -1,2 +1,2 @@
 Auuki_scenic_loop.csv
-randomsnippets.csv
+Auuki_village.csv

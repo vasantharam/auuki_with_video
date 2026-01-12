@@ -1,7 +1,9 @@
 /ble-spec/
 /ant-spec/
 /fit-spec/
-/dist/
+dist/*
+!dist/videos/
+!dist/videos/**
 /node_modules/
 /gists/
 /src/simulation-scripts.js

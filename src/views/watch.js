@@ -40,6 +40,8 @@ class Watch extends HTMLElement {
         this.videoSources = [];
         this.videoIndex = 0;
         this.currentMultiplier = 1;
+        this.csvOptions = ['files'];
+        this.selectedCsv = 'files';
 
         this.dom.start.addEventListener('pointerup', this.onStart, this.signal);
         this.dom.pause.addEventListener('pointerup', this.onPause, this.signal);
@@ -63,7 +65,9 @@ class Watch extends HTMLElement {
             videoEl.addEventListener('ended', this.onVideoEnded.bind(this), this.signal);
         }
 
-        this.loadVideoManifest();
+        this.$csvSelector = document.querySelector('#video-csv-selector');
+        this.renderCsvSelector();
+        this.loadCsvOptions();
     }
     disconnectedCallback() {
         this.abortController.abort();
@@ -159,29 +163,106 @@ class Watch extends HTMLElement {
         this.heartRate = heartRate;
         this.updatePlaybackRate();
     }
-    async loadVideoManifest() {
+    renderCsvSelector() {
+        if(!this.$csvSelector) return;
+        const options = this.csvOptions ?? [];
+        const selected = this.selectedCsv;
+        const list = options.map((name, idx) => {
+            const label = name.replace(/\.csv$/i, '');
+            const id = `csv-opt-${idx}`;
+            return `
+                <label class="video-csv-option" for="${id}">
+                    <input type="radio" id="${id}" name="video-csv" value="${name}" ${name === selected ? 'checked' : ''}>
+                    <span>${label}</span>
+                </label>
+            `;
+        }).join('');
+        this.$csvSelector.innerHTML = `
+            <h4>Virtual AI Routes</h4>
+            <div class="video-csv-list">
+                ${list || '<div>No playlists found</div>'}
+            </div>
+        `;
+        this.$csvSelector.querySelectorAll('input[name="video-csv"]').forEach(input => {
+            input.addEventListener('change', (e) => {
+                const value = e.target.value;
+                if(value !== this.selectedCsv) {
+                    this.selectedCsv = value;
+                    this.videoIndex = 0;
+                    this.loadVideoManifest(this.selectedCsv);
+                }
+            }, this.signal);
+        });
+    }
+    async loadCsvOptions() {
+        const nextOptions = [];
         try {
-            const res = await fetch('/videos/files.csv');
-            if(!res.ok) return;
-            const text = await res.text();
-            const entries = text
-                .split(/\r?\n/)
-                .map(line => line.trim())
-                .filter(line => line && !line.startsWith('#'))
-                .map(line => line.split(',').map(x => x.trim()))
-                .map(([file, multiplier]) => ({
-                    src: `/videos/${file}`,
-                    multiplier: isNaN(parseFloat(multiplier)) ? 1 : parseFloat(multiplier),
-                }))
-                .filter(entry => entry.src && entry.src.endsWith('.mp4'));
-            if(entries.length > 0) {
-                this.videoSources = entries;
-                this.videoIndex = 0;
-                this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
-                const heroVideo = document.querySelector('#home-hero-video');
-                const videoEl = heroVideo?.querySelector('video');
-                if (heroVideo && videoEl) {
-                    this.ensureVideoSource(videoEl);
+            // Prefer a simple text manifest listing CSV files (one per line).
+            const resTxt = await fetch('/videos/routes.txt');
+            if(resTxt.ok) {
+                const text = await resTxt.text();
+                text.split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(line => line && !line.startsWith('#'))
+                    .forEach(line => {
+                        const base = line.replace(/\.csv$/i, '');
+                        if(base) nextOptions.push(base);
+                    });
+            }
+        } catch(e) {
+            console.warn('routes.txt not available, falling back', e);
+        }
+        if(nextOptions.length === 0) {
+            try {
+                const res = await fetch('/videos/csv-index.json');
+                if(res.ok) {
+                    const list = await res.json();
+                    if(Array.isArray(list) && list.length > 0) {
+                        list.forEach(name => {
+                            const base = `${name}`.replace(/\.csv$/i, '');
+                            if(base) nextOptions.push(base);
+                        });
+                    }
+                }
+            } catch(e) {
+                console.warn('csv-index.json not available, using defaults', e);
+            }
+        }
+        if(nextOptions.length > 0) {
+            this.csvOptions = nextOptions;
+            if(!nextOptions.includes(this.selectedCsv)) {
+                this.selectedCsv = nextOptions[0];
+            }
+        }
+        this.renderCsvSelector();
+        if(this.selectedCsv) {
+            await this.loadVideoManifest(this.selectedCsv);
+        }
+    }
+    async loadVideoManifest(csvName = 'files') {
+        try {
+            const res = await fetch(`/videos/${csvName}.csv`);
+            if(res.ok) {
+                const text = await res.text();
+                const entries = text
+                    .split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(line => line && !line.startsWith('#'))
+                    .map(line => line.split(',').map(x => x.trim()))
+                    .map(([file, multiplier]) => ({
+                        src: `/videos/${file}`,
+                        multiplier: isNaN(parseFloat(multiplier)) ? 1 : parseFloat(multiplier),
+                    }))
+                    .filter(entry => entry.src && entry.src.endsWith('.mp4'));
+                if(entries.length > 0) {
+                    this.videoSources = entries;
+                    this.videoIndex = 0;
+                    this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                    const heroVideo = document.querySelector('#home-hero-video');
+                    const videoEl = heroVideo?.querySelector('video');
+                    if (heroVideo && videoEl) {
+                        this.ensureVideoSource(videoEl);
+                    }
                 }
             }
         } catch(e) {
