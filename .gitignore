@@ -2,7 +2,8 @@
 /ant-spec/
 /fit-spec/
 dist/*
-!dist/videos/
+!dist/videos
+!dist/videos/*
 !dist/videos/**
 /node_modules/
 /gists/

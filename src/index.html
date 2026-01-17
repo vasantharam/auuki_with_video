@@ -310,6 +310,12 @@
                                            playsinline>
                                         Your browser does not support the video tag.
                                     </video>
+                                        <div id="playback-rate-indicator" class="playback-rate-indicator" aria-hidden="true">
+                                            <span class="playback-rate-bar"></span>
+                                            <span class="playback-rate-bar"></span>
+                                            <span class="playback-rate-bar"></span>
+                                            <span class="playback-rate-bar"></span>
+                                        </div>
                                 </div>
                             </div> <!-- end targets--cont -->
                         </div> <!-- end targets -->
@@ -1458,6 +1464,18 @@
                         </svg>
                     </div>
 
+                    <div id="watch-snapshot" class="control--btn">
+                        <svg class="control--btn--icon" width="24" height="24">
+                            <use href="#icon--image"></use>
+                        </svg>
+                    </div>
+
+                    <div id="watch-record" class="control--btn">
+                        <svg class="control--btn--icon" width="24" height="24">
+                            <use href="#icon--video-camera"></use>
+                        </svg>
+                    </div>
+
                     <div id="activity-save" class="control--btn">
                         <svg class="control--btn--icon" width="24" height="24">
                             <use href="#icon--file"></use>
@@ -1607,6 +1625,9 @@
             </symbol>
             <symbol id="icon--image" viewBox="0 -960 960 960">
                 <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm40-80h480L570-480 450-320l-90-120-120 160Zm-40 80v-560 560Z"/>
+            </symbol>
+            <symbol id="icon--video-camera" viewBox="0 -960 960 960">
+                <path d="M160-200q-33 0-56.5-23.5T80-280v-400q0-33 23.5-56.5T160-760h440q33 0 56.5 23.5T680-680v160l200-160v440L680-400v120q0 33-23.5 56.5T600-200H160Zm0-80h440v-400H160v400Zm440-200Zm80 0 120 96v-192l-120 96Z"/>
             </symbol>
             <symbol id="icon--file" viewBox="0 -960 960 960">
                 <path d="M320-240h320v-80H320v80Zm0-160h320v-80H320v80ZM240-80q-33 0-56.5-23.5T160-160v-640q0-33 23.5-56.5T240-880h320l240 240v480q0 33-23.5 56.5T720-80H240Zm280-520v-200H240v640h480v-440H520ZM240-800v200-200 640-640Z"/>
