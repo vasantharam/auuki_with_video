@@ -47,6 +47,7 @@
                                 <div class="connection-switch--indicator off"></div>
                                 <div class="connection-switch--label">HRM</div>
                             </connection-switch>
+
                         </header>
 
                         <div class="data-tiles">
@@ -292,33 +293,111 @@
                                          </z-stack> -->
                         </div>
 
+                        <div id="targets">
+                            <div class="targets--cont video-target">
+                                <div id="video-csv-selector" class="video-csv-selector">
+                                    <!-- filled by watch.js -->
+                                </div>
+                                <div class="video-stage">
+                                    <div id="home-hero-video" class="home-hero">
+                                        <div class="home-hero-media">
+                                            <video class="home-hero--video"
+                                                   src="about:blank"
+                                                   autoplay
+                                                   muted
+                                                   playsinline>
+                                                Your browser does not support the video tag.
+                                            </video>
+                                            <div class="video-performance-overlay" aria-hidden="true">
+                                                <div class="video-overlay-graph">
+                                                    <div class="video-overlay-graph-header">
+                                                        <workout-name class="video-overlay-title"></workout-name>
+                                                        <div class="video-overlay-interval-summary">
+                                                            <span id="video-interval-label" class="video-overlay-chip">Warmup</span>
+                                                            <interval-time class="video-overlay-chip-value">--:--</interval-time>
+                                                        </div>
+                                                    </div>
+                                                    <div class="video-overlay-graph-band">
+                                                        <div class="video-overlay-track-legend">
+                                                            <span class="video-overlay-track-label workout">Workout</span>
+                                                            <span class="video-overlay-track-label power">Power</span>
+                                                            <span class="video-overlay-track-label heart">Heart Rate</span>
+                                                        </div>
+                                                        <div class="video-overlay-combined-graph">
+                                                            <div id="video-workout-plan" class="video-overlay-plan"></div>
+                                                            <svg id="video-power-graph" class="video-overlay-sparkline combined" viewBox="0 0 100 24" preserveAspectRatio="none">
+                                                                <polyline class="video-overlay-sparkline-line power" points=""></polyline>
+                                                            </svg>
+                                                            <svg id="video-heart-graph" class="video-overlay-sparkline combined" viewBox="0 0 100 24" preserveAspectRatio="none">
+                                                                <polyline class="video-overlay-sparkline-line heart" points=""></polyline>
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="video-overlay-metrics">
+                                                    <div class="video-overlay-metric">
+                                                        <span class="video-overlay-label">Power</span>
+                                                        <div class="video-overlay-value-group">
+                                                            <power-value class="video-overlay-value" prop="db:power1s">--</power-value>
+                                                            <span class="video-overlay-unit">W</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="video-overlay-metric">
+                                                        <span class="video-overlay-label">Target</span>
+                                                        <div class="video-overlay-value-group">
+                                                            <power-target class="video-overlay-value">--</power-target>
+                                                            <span class="video-overlay-unit">W</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="video-overlay-metric">
+                                                        <span class="video-overlay-label">Cadence</span>
+                                                        <div class="video-overlay-value-group">
+                                                            <cadence-value class="video-overlay-value">--</cadence-value>
+                                                            <span class="video-overlay-unit">rpm</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="video-overlay-metric">
+                                                        <span class="video-overlay-label">Heart Rate</span>
+                                                        <div class="video-overlay-value-group">
+                                                            <heart-rate-value class="video-overlay-value">--</heart-rate-value>
+                                                            <span class="video-overlay-unit">bpm</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="video-overlay-metric">
+                                                        <span class="video-overlay-label">Elapsed</span>
+                                                        <timer-time class="video-overlay-value">--:--:--</timer-time>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div id="playback-rate-indicator" class="playback-rate-indicator" aria-hidden="true">
+                                                <div class="playback-rate-bars">
+                                                    <span class="playback-rate-bar"></span>
+                                                    <span class="playback-rate-bar"></span>
+                                                    <span class="playback-rate-bar"></span>
+                                                    <span class="playback-rate-bar"></span>
+                                                </div>
+                                                <span id="playback-rate-value" class="playback-rate-value">1</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <aside id="youtube-feed" class="youtube-feed" aria-label="Scenic YouTube channels">
+                                        <div class="youtube-feed-header">
+                                            <h4 class="youtube-feed-heading">Scenic Feed</h4>
+                                            <span id="youtube-feed-label" class="youtube-feed-source"></span>
+                                        </div>
+                                        <div
+                                            id="youtube-feed-player"
+                                            class="youtube-feed-player"
+                                            aria-label="Scenic YouTube feed">
+                                        </div>
+                                    </aside>
+                                </div>
+                            </div> <!-- end targets--cont -->
+                        </div> <!-- end targets -->
                         <div id="graph-workout" class="graph">
                             <workout-name id="current-workout-name" class="graph--heading"></workout-name>
                             <workout-graph class="workout--graph-cont" prop="workout" metric="ftp"></workout-graph>
                         </div>
-
-                            <div id="targets">
-                                <div class="targets--cont video-target">
-                                    <div id="video-csv-selector" class="video-csv-selector">
-                                        <!-- filled by watch.js -->
-                                    </div>
-                                    <div id="home-hero-video" class="home-hero">
-                                        <video class="home-hero--video"
-                                               src="about:blank"
-                                               autoplay
-                                               muted
-                                           playsinline>
-                                        Your browser does not support the video tag.
-                                    </video>
-                                        <div id="playback-rate-indicator" class="playback-rate-indicator" aria-hidden="true">
-                                            <span class="playback-rate-bar"></span>
-                                            <span class="playback-rate-bar"></span>
-                                            <span class="playback-rate-bar"></span>
-                                            <span class="playback-rate-bar"></span>
-                                        </div>
-                                </div>
-                            </div> <!-- end targets--cont -->
-                        </div> <!-- end targets -->
                 </div> <!-- end home-page-wrapper -->
             </div> <!-- end page-home -->
 

@@ -17,7 +17,16 @@ class Watch extends HTMLElement {
         this.onCadence = this.onCadence.bind(this);
         this.onPower1s = this.onPower1s.bind(this);
         this.onHeartRate = this.onHeartRate.bind(this);
+        this.onElapsed = this.onElapsed.bind(this);
+        this.onLapTime = this.onLapTime.bind(this);
+        this.onIntervalDuration = this.onIntervalDuration.bind(this);
+        this.onIntervalIndex = this.onIntervalIndex.bind(this);
+        this.onWorkout = this.onWorkout.bind(this);
         this.onVideoEnded = this.onVideoEnded.bind(this);
+        this.updateOverlayClearance = this.updateOverlayClearance.bind(this);
+        this.updateResponsiveLayout = this.updateResponsiveLayout.bind(this);
+        this.onYoutubePlayerReady = this.onYoutubePlayerReady.bind(this);
+        this.onYoutubePlayerStateChange = this.onYoutubePlayerStateChange.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -39,6 +48,14 @@ class Watch extends HTMLElement {
         this.cadence = 0;
         this.power1s = 0;
         this.heartRate = 0;
+        this.elapsed = 0;
+        this.lapTime = 0;
+        this.intervalDuration = 0;
+        this.intervalIndex = 0;
+        this.workoutIntervals = [];
+        this.powerHistory = [];
+        this.heartHistory = [];
+        this.maxHistoryPoints = 120;
         this.videoSources = [];
         this.videoIndex = 0;
         this.currentMultiplier = 1;
@@ -50,6 +67,36 @@ class Watch extends HTMLElement {
         this.$rateBars = this.$rateIndicator
             ? Array.from(this.$rateIndicator.querySelectorAll('.playback-rate-bar'))
             : [];
+        this.$rateValue = document.querySelector('#playback-rate-value');
+        this.$youtubeFeedPlayer = document.querySelector('#youtube-feed-player');
+        this.$youtubeFeed = document.querySelector('#youtube-feed');
+        this.$youtubeFeedHeader = document.querySelector('.youtube-feed-header');
+        this.$youtubeFeedLabel = document.querySelector('#youtube-feed-label');
+        this.$intervalLabel = document.querySelector('#video-interval-label');
+        this.$workoutPlan = document.querySelector('#video-workout-plan');
+        this.$powerGraph = document.querySelector('#video-power-graph polyline');
+        this.$heartGraph = document.querySelector('#video-heart-graph polyline');
+        this.$videoOverlay = document.querySelector('.video-performance-overlay');
+        this.$videoStage = document.querySelector('.video-stage');
+        this.youtubePlayer = null;
+        this.youtubePlayerReady = false;
+        this.pendingYoutubeFeed = null;
+        this.isAdvancingYoutubeFeed = false;
+        this.youtubeFeedHistoryKey = 'auuki.youtube-feed-history-v2';
+        this.youtubeChannels = [
+            {
+                label: 'Adventure Every Day',
+                videos: ['zhLO7BwoQl4', 'cX2dPW9y9Wg', 'ErDhr1fEzpM', 'jFwDlR31QfQ', '-tP6SdjATvM', 'KWCxtcYpm6s', 'U1DRvPO-pmY', 'JDIhYM_i-vU']
+            },
+            {
+                label: 'Abao Ambience',
+                videos: ['8dMe11ruUuc', 'ymO9UQwntyo', 'Zs-6aOmX9DQ', 'BD6PZD_OueA', 'zSxrzaJKmJQ', '68_rDk_6BIQ', 'ylj8qLwiFHA', 'hziRbOd3Qh0']
+            },
+            {
+                label: 'SAFA Brian',
+                videos: ['fclPb1PTWuQ', 'Sj2rYpMW158', 'c70_akAetbA', 'mUhMNDkwTs0', 'bpy6jWtvnqU', 'XLsQii1whc8', 'AUtFuhgXn3A', '1wxBKvxAlM0']
+            },
+        ];
 
         this.dom.start.addEventListener('pointerup', this.onStart, this.signal);
         this.dom.pause.addEventListener('pointerup', this.onPause, this.signal);
@@ -62,25 +109,51 @@ class Watch extends HTMLElement {
         this.dom.save.addEventListener(`pointerup`, this.onSave, this.signal);
 
         this.renderInit(this.dom);
+        this.setupYoutubeFeed();
 
         xf.sub(`db:watchStatus`, this.onWatchStatus.bind(this), this.signal);
         xf.sub(`db:workoutStatus`, this.onWorkoutStatus.bind(this), this.signal);
         xf.sub(`db:cadence`, this.onCadence.bind(this), this.signal);
         xf.sub(`db:power1s`, this.onPower1s.bind(this), this.signal);
         xf.sub(`db:heartRate`, this.onHeartRate.bind(this), this.signal);
+        xf.sub(`db:elapsed`, this.onElapsed, this.signal);
+        xf.sub(`db:lapTime`, this.onLapTime, this.signal);
+        xf.sub(`db:intervalDuration`, this.onIntervalDuration, this.signal);
+        xf.sub(`db:intervalIndex`, this.onIntervalIndex, this.signal);
+        xf.sub(`db:workout`, this.onWorkout, this.signal);
 
         const heroVideo = document.querySelector('#home-hero-video');
+        this.$heroVideo = heroVideo;
+        this.$fixedBottom = document.querySelector('.fixed-bottom');
         const videoEl = heroVideo?.querySelector('video');
         if (heroVideo && videoEl) {
             videoEl.addEventListener('ended', this.onVideoEnded.bind(this), this.signal);
         }
+        if (typeof ResizeObserver !== 'undefined') {
+            this.overlayResizeObserver = new ResizeObserver(() => {
+                this.updateResponsiveLayout();
+                this.updateOverlayClearance();
+            });
+            this.$heroVideo && this.overlayResizeObserver.observe(this.$heroVideo);
+            this.$fixedBottom && this.overlayResizeObserver.observe(this.$fixedBottom);
+            this.$videoStage && this.overlayResizeObserver.observe(this.$videoStage);
+        }
+        window.addEventListener('resize', () => {
+            this.updateResponsiveLayout();
+            this.updateOverlayClearance();
+        }, this.signal);
 
         this.$csvSelector = document.querySelector('#video-csv-selector');
         this.renderCsvSelector();
         this.loadCsvOptions();
         this.updatePlaybackIndicator(this.getPlaybackRate());
+        this.updateResponsiveLayout();
+        this.updateOverlayClearance();
     }
     disconnectedCallback() {
+        this.youtubePlayer?.destroy?.();
+        this.youtubePlayer = null;
+        this.overlayResizeObserver?.disconnect();
         this.abortController.abort();
     }
     onStart(e) {
@@ -214,17 +287,345 @@ class Watch extends HTMLElement {
     renderWorkoutStarted(dom) {
         // dom.workout.style.display = 'none';
     };
+    setupYoutubeFeed() {
+        if(!this.$youtubeFeedPlayer) return;
+        const { channel, videoId } = this.pickYoutubeFeed();
+        const startSeconds = this.getRandomYoutubeStartSeconds();
+        this.pendingYoutubeFeed = { channel, videoId, startSeconds };
+        if(this.$youtubeFeedLabel) {
+            this.$youtubeFeedLabel.textContent = channel.label;
+        }
+        this.ensureYoutubePlayer();
+    }
+    pickYoutubeFeed() {
+        const recent = this.getYoutubeFeedHistory();
+        const maxRecent = Math.min(10, this.youtubeChannels.length * 4);
+        let choice = null;
+
+        for(let attempt = 0; attempt < 20 && !choice; attempt++) {
+            const channel = this.youtubeChannels[Math.floor(Math.random() * this.youtubeChannels.length)];
+            const videoId = channel.videos[Math.floor(Math.random() * channel.videos.length)];
+            const key = `${channel.label}:${videoId}`;
+            if(!recent.includes(key)) {
+                choice = { channel, videoId, key };
+            }
+        }
+
+        if(!choice) {
+            const channel = this.youtubeChannels[Math.floor(Math.random() * this.youtubeChannels.length)];
+            const videoId = channel.videos[Math.floor(Math.random() * channel.videos.length)];
+            choice = { channel, videoId, key: `${channel.label}:${videoId}` };
+        }
+
+        const nextRecent = [...recent, choice.key].slice(-maxRecent);
+        this.setYoutubeFeedHistory(nextRecent);
+        return {
+            channel: choice.channel,
+            videoId: choice.videoId,
+            seed: `${Date.now()}-${Math.floor(Math.random() * 100000)}`
+        };
+    }
+    getRandomYoutubeStartSeconds() {
+        return Math.floor(Math.random() * 900);
+    }
+    getYoutubeFeedHistory() {
+        try {
+            const raw = window.localStorage.getItem(this.youtubeFeedHistoryKey);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch(err) {
+            return [];
+        }
+    }
+    setYoutubeFeedHistory(history) {
+        try {
+            window.localStorage.setItem(this.youtubeFeedHistoryKey, JSON.stringify(history));
+        } catch(err) {
+            // Ignore storage failures and fall back to in-memory randomness.
+        }
+    }
+    ensureYoutubePlayer() {
+        if(!this.$youtubeFeedPlayer) return;
+        if(this.youtubePlayerReady && this.youtubePlayer) {
+            this.loadPendingYoutubeFeed();
+            return;
+        }
+
+        this.loadYoutubeIframeApi().then((YT) => {
+            if(this.youtubePlayer || !this.$youtubeFeedPlayer?.isConnected) return;
+            const initialFeed = this.pendingYoutubeFeed ?? {
+                channel: this.youtubeChannels[0],
+                videoId: this.youtubeChannels[0]?.videos?.[0],
+                startSeconds: 0,
+            };
+            this.youtubePlayer = new YT.Player(this.$youtubeFeedPlayer, {
+                host: 'https://www.youtube-nocookie.com',
+                videoId: initialFeed.videoId,
+                playerVars: {
+                    autoplay: 1,
+                    controls: 1,
+                    playsinline: 1,
+                    rel: 0,
+                    modestbranding: 1,
+                    enablejsapi: 1,
+                    origin: window.location.origin,
+                    start: initialFeed.startSeconds,
+                },
+                events: {
+                    onReady: this.onYoutubePlayerReady,
+                    onStateChange: this.onYoutubePlayerStateChange,
+                },
+            });
+        }).catch((err) => {
+            console.warn('YouTube player API unavailable, falling back to iframe src.', err);
+            this.loadPendingYoutubeFeedFallback();
+        });
+    }
+    loadYoutubeIframeApi() {
+        if(window.YT?.Player) {
+            return Promise.resolve(window.YT);
+        }
+        if(Watch.youtubeApiPromise) {
+            return Watch.youtubeApiPromise;
+        }
+        Watch.youtubeApiPromise = new Promise((resolve, reject) => {
+            const existing = document.querySelector('script[data-youtube-iframe-api]');
+            const timeoutId = window.setTimeout(() => {
+                reject(new Error('Timed out waiting for YouTube iframe API'));
+            }, 15000);
+            const previousReady = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = () => {
+                window.clearTimeout(timeoutId);
+                previousReady?.();
+                resolve(window.YT);
+            };
+            if(existing) {
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://www.youtube.com/iframe_api';
+            script.async = true;
+            script.dataset.youtubeIframeApi = 'true';
+            script.onerror = () => {
+                window.clearTimeout(timeoutId);
+                reject(new Error('Failed to load YouTube iframe API'));
+            };
+            document.head.appendChild(script);
+        });
+        return Watch.youtubeApiPromise;
+    }
+    onYoutubePlayerReady(event) {
+        this.youtubePlayerReady = true;
+        event.target.mute();
+        this.loadPendingYoutubeFeed();
+    }
+    onYoutubePlayerStateChange(event) {
+        if(event?.data !== window.YT?.PlayerState?.ENDED || this.isAdvancingYoutubeFeed) {
+            return;
+        }
+        this.isAdvancingYoutubeFeed = true;
+        this.setupYoutubeFeed();
+        window.setTimeout(() => {
+            this.isAdvancingYoutubeFeed = false;
+        }, 300);
+    }
+    loadPendingYoutubeFeed() {
+        if(!this.youtubePlayerReady || !this.youtubePlayer || !this.pendingYoutubeFeed) return;
+        const { channel, videoId, startSeconds } = this.pendingYoutubeFeed;
+        if(this.$youtubeFeedLabel) {
+            this.$youtubeFeedLabel.textContent = channel.label;
+        }
+        this.youtubePlayer.loadVideoById({
+            videoId,
+            startSeconds,
+        });
+        this.youtubePlayer.mute();
+        this.pendingYoutubeFeed = null;
+    }
+    loadPendingYoutubeFeedFallback() {
+        if(!this.$youtubeFeedPlayer || !this.pendingYoutubeFeed) return;
+        const { channel, videoId, startSeconds } = this.pendingYoutubeFeed;
+        this.$youtubeFeedPlayer.innerHTML = `
+            <iframe
+                class="youtube-feed-player-frame"
+                title="Scenic YouTube feed"
+                src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&start=${startSeconds}&cacheBust=${Date.now()}"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerpolicy="strict-origin-when-cross-origin"
+                allowfullscreen>
+            </iframe>
+        `;
+        if(this.$youtubeFeedLabel) {
+            this.$youtubeFeedLabel.textContent = channel.label;
+        }
+        this.pendingYoutubeFeed = null;
+    }
+    updateResponsiveLayout() {
+        if(!this.$videoStage || !this.$youtubeFeed || !this.$heroVideo) return;
+
+        if(window.innerWidth < 1100) {
+            this.$videoStage.style.removeProperty('display');
+            this.$videoStage.style.removeProperty('gap');
+            this.$videoStage.style.removeProperty('align-items');
+            this.$videoStage.style.removeProperty('grid-template-columns');
+            this.$youtubeFeed.style.removeProperty('width');
+            this.$youtubeFeed.style.removeProperty('min-width');
+            this.$youtubeFeed.style.removeProperty('max-width');
+            this.$youtubeFeed.style.removeProperty('flex');
+            this.$youtubeFeed.style.removeProperty('height');
+            this.$youtubeFeedPlayer?.style.removeProperty('height');
+            this.$heroVideo.style.removeProperty('width');
+            this.$heroVideo.style.removeProperty('max-width');
+            this.$heroVideo.style.removeProperty('min-width');
+            this.$heroVideo.style.removeProperty('flex');
+            return;
+        }
+
+        const stageWidth = this.$videoStage.clientWidth;
+        const gap = 13; // 0.8rem at the app's base font sizing
+        const scenicShare = window.innerWidth >= 2100 ? 0.54 : window.innerWidth >= 1500 ? 0.5 : 0.47;
+        const minMainWidth = 360;
+        const minScenicWidth = 520;
+        const scenicWidth = Math.max(
+            minScenicWidth,
+            Math.min(stageWidth * scenicShare, stageWidth - minMainWidth - gap)
+        );
+        const mainWidth = Math.max(minMainWidth, stageWidth - scenicWidth - gap);
+
+        this.$videoStage.style.setProperty('display', 'flex', 'important');
+        this.$videoStage.style.setProperty('gap', `${gap}px`, 'important');
+        this.$videoStage.style.setProperty('align-items', 'stretch', 'important');
+        this.$videoStage.style.setProperty('grid-template-columns', `${mainWidth}px ${scenicWidth}px`, 'important');
+        this.$youtubeFeed.style.setProperty('width', `${scenicWidth}px`, 'important');
+        this.$youtubeFeed.style.setProperty('min-width', `${scenicWidth}px`, 'important');
+        this.$youtubeFeed.style.setProperty('max-width', `${scenicWidth}px`, 'important');
+        this.$youtubeFeed.style.setProperty('flex', `0 0 ${scenicWidth}px`, 'important');
+        this.$heroVideo.style.setProperty('width', `${mainWidth}px`, 'important');
+        this.$heroVideo.style.setProperty('max-width', `${mainWidth}px`, 'important');
+        this.$heroVideo.style.setProperty('min-width', `${mainWidth}px`, 'important');
+        this.$heroVideo.style.setProperty('flex', `0 0 ${mainWidth}px`, 'important');
+
+        const heroMedia = this.$heroVideo?.querySelector('.home-hero-media');
+        const mediaHeight = heroMedia?.getBoundingClientRect().height ?? 0;
+        if(mediaHeight > 0) {
+            const feedHeight = Math.max(320, Math.round(mediaHeight));
+            this.$youtubeFeed.style.height = `${feedHeight}px`;
+            this.$youtubeFeedPlayer?.style.removeProperty('height');
+        }
+    }
+    updateOverlayClearance() {
+        if(!this.$heroVideo || !this.$fixedBottom || !this.$videoOverlay) return;
+        const heroRect = this.$heroVideo.getBoundingClientRect();
+        const fixedRect = this.$fixedBottom.getBoundingClientRect();
+        const overlap = Math.max(0, heroRect.bottom - fixedRect.top);
+        const clearance = overlap > 0 ? overlap + 8 : 0;
+        const roomBelowHero = Math.max(0, fixedRect.top - heroRect.bottom);
+        const overlayHeight = this.$videoOverlay.getBoundingClientRect().height;
+        const canDetach = roomBelowHero >= overlayHeight + 24;
+
+        this.$heroVideo.classList.toggle('hud-detached', canDetach);
+        this.$heroVideo.style.setProperty('--home-overlay-detached-height', `${Math.ceil(overlayHeight)}px`);
+        this.$heroVideo.style.setProperty('--home-overlay-dynamic-clearance', `${Math.ceil(clearance)}px`);
+    }
+    onElapsed(elapsed) {
+        this.elapsed = elapsed;
+        this.renderOverlayGraph();
+    }
+    onLapTime(lapTime) {
+        this.lapTime = lapTime;
+        this.renderOverlayGraph();
+    }
+    onIntervalDuration(intervalDuration) {
+        this.intervalDuration = intervalDuration;
+        this.renderOverlayGraph();
+    }
+    onIntervalIndex(intervalIndex) {
+        this.intervalIndex = intervalIndex;
+        this.renderOverlayGraph();
+    }
+    onWorkout(workout) {
+        this.workoutIntervals = workout?.intervals ?? [];
+        this.renderOverlayGraph();
+    }
+    renderOverlayGraph() {
+        const currentInterval = this.workoutIntervals[this.intervalIndex] ?? null;
+        const intervalName = currentInterval?.name ?? currentInterval?.type ?? `Interval ${this.intervalIndex + 1}`;
+
+        if(this.$intervalLabel) {
+            this.$intervalLabel.textContent = intervalName;
+        }
+        if(this.$workoutPlan) {
+            this.$workoutPlan.innerHTML = this.renderWorkoutPlan();
+        }
+        if(this.$powerGraph) {
+            this.$powerGraph.setAttribute('points', this.toSparklinePoints(this.powerHistory, 500));
+        }
+        if(this.$heartGraph) {
+            this.$heartGraph.setAttribute('points', this.toSparklinePoints(this.heartHistory, 190));
+        }
+    }
     onCadence(cadence) {
         this.cadence = cadence;
         this.updatePlaybackRate();
     }
     onPower1s(power) {
         this.power1s = power;
+        this.pushHistory(this.powerHistory, power);
         this.updatePlaybackRate();
+        this.renderOverlayGraph();
     }
     onHeartRate(heartRate) {
         this.heartRate = heartRate;
+        this.pushHistory(this.heartHistory, heartRate);
         this.updatePlaybackRate();
+        this.renderOverlayGraph();
+    }
+    pushHistory(history, value) {
+        history.push(value ?? 0);
+        if(history.length > this.maxHistoryPoints) {
+            history.shift();
+        }
+    }
+    toSparklinePoints(history, maxValue) {
+        if(history.length === 0) return '';
+        const count = Math.max(history.length - 1, 1);
+        return history.map((value, index) => {
+            const x = (index / count) * 100;
+            const clamped = Math.max(0, Math.min(maxValue, value ?? 0));
+            const y = 24 - ((clamped / maxValue) * 24);
+            return `${x.toFixed(2)},${y.toFixed(2)}`;
+        }).join(' ');
+    }
+    renderWorkoutPlan() {
+        if(this.workoutIntervals.length === 0) {
+            return '<div class="video-overlay-plan-marker" style="left: 0%;"></div>';
+        }
+
+        const totalDuration = this.workoutIntervals.reduce((sum, interval) => {
+            return sum + Math.max(interval?.duration ?? 0, 0);
+        }, 0);
+
+        if(totalDuration <= 0) {
+            return '<div class="video-overlay-plan-marker" style="left: 0%;"></div>';
+        }
+
+        let elapsedBeforeCurrent = 0;
+        for(let i = 0; i < this.intervalIndex; i += 1) {
+            elapsedBeforeCurrent += Math.max(this.workoutIntervals[i]?.duration ?? 0, 0);
+        }
+
+        const absoluteElapsed = elapsedBeforeCurrent + Math.max(this.lapTime ?? 0, 0);
+        const markerLeft = Math.max(0, Math.min(100, (absoluteElapsed / totalDuration) * 100));
+
+        const segments = this.workoutIntervals.map((interval) => {
+            const duration = Math.max(interval?.duration ?? 0, 0);
+            const width = (duration / totalDuration) * 100;
+            const target = Math.max(interval?.power ?? 0, interval?.steps?.[0]?.power ?? 0, 0);
+            const opacity = 0.25 + Math.min(target, 1.2) * 0.5;
+            return `<div class="video-overlay-plan-segment" style="width:${width}%;background:rgba(248, 199, 58, ${opacity.toFixed(3)});"></div>`;
+        }).join('');
+
+        return `${segments}<div class="video-overlay-plan-marker" style="left:${markerLeft}%;"></div>`;
     }
     renderCsvSelector() {
         if(!this.$csvSelector) return;
@@ -325,8 +726,11 @@ class Watch extends HTMLElement {
                     const videoEl = heroVideo?.querySelector('video');
                     if (heroVideo && videoEl) {
                         this.ensureVideoSource(videoEl);
+                        heroVideo.classList.add('active');
                         if (this.watchStatus === 'started') {
                             this.startVideoPlayback();
+                        } else {
+                            videoEl.pause();
                         }
                     }
                 }
@@ -388,7 +792,6 @@ class Watch extends HTMLElement {
         const heroVideo = document.querySelector('#home-hero-video');
         const videoEl = heroVideo?.querySelector('video');
         if (heroVideo && videoEl && this.videoSources.length > 0) {
-            heroVideo.classList.add('active');
             this.ensureVideoSource(videoEl);
             videoEl.currentTime = 0;
             const rate = this.getPlaybackRate();
@@ -415,7 +818,6 @@ class Watch extends HTMLElement {
         if (heroVideo && videoEl) {
             videoEl.pause();
             videoEl.currentTime = 0;
-            heroVideo.classList.remove('active');
         }
     }
 
@@ -435,6 +837,11 @@ class Watch extends HTMLElement {
             const height = baseHeight + (range * clamped * scale);
             bar.style.height = `${height}px`;
         });
+
+        if(this.$rateValue) {
+            const rpe = Math.max(1, Math.min(10, Math.round(1 + (clamped * 9))));
+            this.$rateValue.textContent = `${rpe}`;
+        }
     }
 
     async captureSnapshotFromStream(stream, timestamp) {
