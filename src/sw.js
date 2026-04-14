@@ -1,4 +1,4 @@
-const cacheName = 'Flux-v008';
+const cacheName = 'Flux-v009';
 const resources = [
     './',
     'index.html',
@@ -157,6 +157,7 @@ const resources = [
 self.addEventListener('install', e => {
     console.log('SW: Install.');
 
+    self.skipWaiting();
     e.waitUntil(caches.open(cacheName).then((cache) => cache.addAll(resources)));
 });
 
@@ -165,12 +166,12 @@ self.addEventListener('activate', e => {
 
     e.waitUntil(
         caches.keys().then((keyList) => {
-                Promise.all(keyList.map((key) => {
+                return Promise.all(keyList.map((key) => {
                     console.log(key);
                     if (key === cacheName) { return; }
                     console.log(`deleting cache ${key}.`);
-                    caches.delete(key);
-                }));
+                    return caches.delete(key);
+                })).then(() => self.clients.claim());
             }));
 });
 

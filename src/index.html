@@ -31,6 +31,22 @@
                     </button>
                 </dialog>
             </modal-error>
+            <dialog id="dialog--strava-guide" class="dialog error strava-guide-dialog">
+                <h3 class="strava-guide-title">Strava Setup Required</h3>
+                <p class="strava-guide-copy">
+                    Save your own Strava app Client ID and Client Secret in this browser before connecting.
+                </p>
+                <ol class="strava-guide-steps">
+                    <li>Open Strava API settings in a new tab.</li>
+                    <li>Create or open your Strava API app.</li>
+                    <li>Set the Authorization Callback Domain to the callback URL shown in Settings.</li>
+                    <li>Paste the Client ID and Client Secret into the Strava setup card and save.</li>
+                </ol>
+                <div class="strava-guide-actions">
+                    <button id="strava-guide-open-api" type="button" class="dialog--dismiss--btn">Open Strava</button>
+                    <button id="strava-guide-close" type="button" class="dialog--dismiss--btn">Close</button>
+                </div>
+            </dialog>
             <navigation-stack>
             <page-group prop="page">
                 <compatibility-check></compatibility-check>
@@ -298,8 +314,15 @@
                                 <div id="video-csv-selector" class="video-csv-selector">
                                     <!-- filled by watch.js -->
                                 </div>
+                                <aside id="video-motivation-panel" class="video-motivation-panel" aria-live="polite" hidden>
+                                    <p id="video-motivation-text" class="video-motivation-text"></p>
+                                </aside>
                                 <div class="video-stage">
                                     <div id="home-hero-video" class="home-hero">
+                                        <div class="home-hero-header">
+                                            <h4 class="home-hero-heading">AI Routes</h4>
+                                            <span id="home-hero-route-label" class="home-hero-route"></span>
+                                        </div>
                                         <div class="home-hero-media">
                                             <video class="home-hero--video"
                                                    src="about:blank"
@@ -308,67 +331,6 @@
                                                    playsinline>
                                                 Your browser does not support the video tag.
                                             </video>
-                                            <div class="video-performance-overlay" aria-hidden="true">
-                                                <div class="video-overlay-graph">
-                                                    <div class="video-overlay-graph-header">
-                                                        <workout-name class="video-overlay-title"></workout-name>
-                                                        <div class="video-overlay-interval-summary">
-                                                            <span id="video-interval-label" class="video-overlay-chip">Warmup</span>
-                                                            <interval-time class="video-overlay-chip-value">--:--</interval-time>
-                                                        </div>
-                                                    </div>
-                                                    <div class="video-overlay-graph-band">
-                                                        <div class="video-overlay-track-legend">
-                                                            <span class="video-overlay-track-label workout">Workout</span>
-                                                            <span class="video-overlay-track-label power">Power</span>
-                                                            <span class="video-overlay-track-label heart">Heart Rate</span>
-                                                        </div>
-                                                        <div class="video-overlay-combined-graph">
-                                                            <div id="video-workout-plan" class="video-overlay-plan"></div>
-                                                            <svg id="video-power-graph" class="video-overlay-sparkline combined" viewBox="0 0 100 24" preserveAspectRatio="none">
-                                                                <polyline class="video-overlay-sparkline-line power" points=""></polyline>
-                                                            </svg>
-                                                            <svg id="video-heart-graph" class="video-overlay-sparkline combined" viewBox="0 0 100 24" preserveAspectRatio="none">
-                                                                <polyline class="video-overlay-sparkline-line heart" points=""></polyline>
-                                                            </svg>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <div class="video-overlay-metrics">
-                                                    <div class="video-overlay-metric">
-                                                        <span class="video-overlay-label">Power</span>
-                                                        <div class="video-overlay-value-group">
-                                                            <power-value class="video-overlay-value" prop="db:power1s">--</power-value>
-                                                            <span class="video-overlay-unit">W</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="video-overlay-metric">
-                                                        <span class="video-overlay-label">Target</span>
-                                                        <div class="video-overlay-value-group">
-                                                            <power-target class="video-overlay-value">--</power-target>
-                                                            <span class="video-overlay-unit">W</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="video-overlay-metric">
-                                                        <span class="video-overlay-label">Cadence</span>
-                                                        <div class="video-overlay-value-group">
-                                                            <cadence-value class="video-overlay-value">--</cadence-value>
-                                                            <span class="video-overlay-unit">rpm</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="video-overlay-metric">
-                                                        <span class="video-overlay-label">Heart Rate</span>
-                                                        <div class="video-overlay-value-group">
-                                                            <heart-rate-value class="video-overlay-value">--</heart-rate-value>
-                                                            <span class="video-overlay-unit">bpm</span>
-                                                        </div>
-                                                    </div>
-                                                    <div class="video-overlay-metric">
-                                                        <span class="video-overlay-label">Elapsed</span>
-                                                        <timer-time class="video-overlay-value">--:--:--</timer-time>
-                                                    </div>
-                                                </div>
-                                            </div>
                                             <div id="playback-rate-indicator" class="playback-rate-indicator" aria-hidden="true">
                                                 <div class="playback-rate-bars">
                                                     <span class="playback-rate-bar"></span>
@@ -391,6 +353,103 @@
                                             aria-label="Scenic YouTube feed">
                                         </div>
                                     </aside>
+                                    <div class="video-performance-overlay" aria-hidden="true">
+                                        <div class="video-overlay-graph">
+                                            <div class="video-overlay-graph-header">
+                                                <workout-name class="video-overlay-title"></workout-name>
+                                                <div class="video-overlay-interval-summary">
+                                                    <span id="video-route-lap-label" class="video-overlay-chip">Lap 1</span>
+                                                    <span id="video-interval-label" class="video-overlay-chip">Warmup</span>
+                                                    <interval-time class="video-overlay-chip-value">--:--</interval-time>
+                                                </div>
+                                            </div>
+                                            <div class="video-overlay-utility-row">
+                                                <div class="video-route-pairing" aria-label="Ride device pairing">
+                                                    <connection-switch for="ble:controllable" class="video-pairing-switch connection-switch">
+                                                        <div class="connection-switch--indicator off"></div>
+                                                        <div class="connection-switch--label">Bike</div>
+                                                    </connection-switch>
+                                                    <connection-switch for="ble:heartRateMonitor" class="video-pairing-switch connection-switch">
+                                                        <div class="connection-switch--indicator off"></div>
+                                                        <div class="connection-switch--label">HR</div>
+                                                    </connection-switch>
+                                                </div>
+                                                <div id="video-route-progress" class="video-route-progress" aria-hidden="true">
+                                                    <div class="video-route-progress-meta">
+                                                        <span id="video-route-progress-label" class="video-route-progress-route">Route</span>
+                                                        <span id="video-route-progress-count" class="video-route-progress-count">0 / 0</span>
+                                                    </div>
+                                                    <div class="video-route-progress-figure">
+                                                        <svg class="video-route-progress-svg" viewBox="0 0 112 96" role="presentation" focusable="false">
+                                                            <path id="video-route-progress-track" class="video-route-progress-track" d="M32 30 C46 10 76 10 92 28 C106 46 100 72 82 82 C62 92 38 90 22 74 C8 60 8 40 32 30 Z" pathLength="100"></path>
+                                                            <path id="video-route-progress-fill" class="video-route-progress-fill" d="M32 30 C46 10 76 10 92 28 C106 46 100 72 82 82 C62 92 38 90 22 74 C8 60 8 40 32 30 Z" pathLength="100"></path>
+                                                            <circle id="video-route-progress-marker" class="video-route-progress-marker" cx="32" cy="30" r="5"></circle>
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="video-overlay-graph-band">
+                                                <div class="video-overlay-track-legend">
+                                                    <span class="video-overlay-track-label workout">Workout</span>
+                                                    <span class="video-overlay-track-label power">Power</span>
+                                                    <span class="video-overlay-track-label heart">Heart Rate</span>
+                                                </div>
+                                                <div id="video-workout-plan" class="video-overlay-plan"></div>
+                                                <div class="video-overlay-live-graphs">
+                                                    <div class="video-overlay-live-graph power">
+                                                        <span class="video-overlay-live-label">Power</span>
+                                                        <div class="video-overlay-combined-graph power">
+                                                            <svg id="video-power-graph" class="video-overlay-sparkline combined" viewBox="0 0 100 24" preserveAspectRatio="none">
+                                                                <polyline class="video-overlay-sparkline-line power" points=""></polyline>
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                    <div class="video-overlay-live-graph heart">
+                                                        <span class="video-overlay-live-label">Heart</span>
+                                                        <div class="video-overlay-combined-graph heart">
+                                                            <svg id="video-heart-graph" class="video-overlay-sparkline combined" viewBox="0 0 100 24" preserveAspectRatio="none">
+                                                                <polyline class="video-overlay-sparkline-line heart" points=""></polyline>
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="video-overlay-metrics">
+                                            <div class="video-overlay-metric">
+                                                <span class="video-overlay-label">Power</span>
+                                                <div class="video-overlay-value-group">
+                                                    <power-value class="video-overlay-value" prop="db:power1s">--</power-value>
+                                                    <span class="video-overlay-unit">W</span>
+                                                </div>
+                                            </div>
+                                            <div class="video-overlay-metric">
+                                                <span class="video-overlay-label">Target</span>
+                                                <div class="video-overlay-value-group">
+                                                    <power-target class="video-overlay-value">--</power-target>
+                                                    <span class="video-overlay-unit">W</span>
+                                                </div>
+                                            </div>
+                                            <div class="video-overlay-metric">
+                                                <span class="video-overlay-label">Cadence</span>
+                                                <div class="video-overlay-value-group">
+                                                    <cadence-value class="video-overlay-value">--</cadence-value>
+                                                    <span class="video-overlay-unit">rpm</span>
+                                                </div>
+                                            </div>
+                                            <div class="video-overlay-metric">
+                                                <span class="video-overlay-label">Heart Rate</span>
+                                                <div class="video-overlay-value-group">
+                                                    <heart-rate-value class="video-overlay-value">--</heart-rate-value>
+                                                    <span class="video-overlay-unit">bpm</span>
+                                                </div>
+                                            </div>
+                                            <div class="video-overlay-metric">
+                                                <span class="video-overlay-label">Elapsed</span>
+                                                <timer-time class="video-overlay-value">--:--:--</timer-time>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div> <!-- end targets--cont -->
                         </div> <!-- end targets -->
@@ -657,262 +716,9 @@
                         </div> <!-- end device-request--controls -->
                     </div> <!-- end device-request--wrapper -->
                 </ant-device-request> <!-- end ant-device-request -->
-                <header class="page--header header--tab--group">
-                    <navigation-action
-                        id="link--settings-settings"
-                        class="library--switch--heading active"
-                        action="settings:settings" topic=":nav">Settings
-                    </navigation-action>
-                    <navigation-action
-                        id="link--settings-profile"
-                        class="library--switch--heading"
-                        action="settings:profile" topic=":nav">Profile
-                    </navigation-action>
+                <header class="page--header">
+                    <h2 class="page--heading">Settings</h2>
                 </header>
-                <!-- profile--sub-tab -->
-                <div id="view--settings-profile" class="sub-tab">
-                    <!-- auth -->
-                    <div class="auth">
-                        <auth-forms>
-                            <div id="password--forms" class="active">
-                                <form id="register--form" class="register--form">
-                                    <h2 class="form--header">Register</h2>
-                                    <div>
-                                        <input id="register--email--input"
-                                            class="input"
-                                            name="email"
-                                            type="email"
-                                            placeholder="Email"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <input id="register--password--input"
-                                            class="input"
-                                            name="password"
-                                            type="password"
-                                            pattern=".{8,64}"
-                                            title="8 characters minimum"
-                                            placeholder="Password"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <input id="register--password-confirmation--input"
-                                            class="input"
-                                            name="password_confirmation"
-                                            pattern=".{8,64}"
-                                            title="8 characters minimum"
-                                            placeholder="Confirm Password"
-                                            type="password"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <input class="input" name="username" type="text" value="" placeholder="Username" autocomplete="off" />
-                                    </div>
-                                    <div class="form--submit--section">
-                                        <button id="register--submit"
-                                                class="btn"
-                                                type="submit">Register</button>
-
-                                        <view-action action=":password:login" topic=":auth">
-                                            <div class="tab--button"
-                                                    index="1">Login instead</div>
-                                        </view-action>
-                                    </div>
-                                </form>
-                                <form id="login--form" class="login--form active">
-                                    <h2 class="form--header">Login</h2>
-                                    <div>
-                                        <input id="login--email--input"
-                                            class="input"
-                                            name="email"
-                                            type="email"
-                                            placeholder="Email"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <input id="login--password--input"
-                                            class="input"
-                                            name="password"
-                                            type="Password"
-                                            pattern=".{8,64}"
-                                            title="8 characters minimum"
-                                            placeholder="Password"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div class="form--submit--section">
-                                        <button id="login--submit"
-                                                class="btn"
-                                                type="submit">Login</button>
-
-                                        <view-action action=":password:register" topic=":auth">
-                                            <div class="tab--button">Register</div>
-                                        </view-action>
-                                        <view-action action=":password:forgot" topic=":auth">
-                                            <div class="tab--button">Forgot</div>
-                                        </view-action>
-                                    </div>
-                                </form>
-                                <form id="forgot--form" class="forgot--form">
-                                    <h2 class="form--header">Forgot</h2>
-                                    <div>
-                                        <input id="forgot--email--input"
-                                            class="input"
-                                            name="email"
-                                            type="email"
-                                            placeholder="Email"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div class="form--submit--section">
-                                        <button id="forgot--submit"
-                                                class="btn"
-                                                type="submit">Forgot</button>
-                                        <view-action action=":password:login" topic=":auth">
-                                            <div class="tab--button">Login instead</div>
-                                        </view-action>
-                                    </div>
-                                    <div id="forgot--msg"></div>
-                                </form>
-                                <form id="reset--form" class="reset--form">
-                                    <h2 class="form--header">Reset</h2>
-                                    <div>
-                                        <input id="reset--password--input"
-                                            class="input"
-                                            name="password"
-                                            type="password"
-                                            pattern=".{8,64}"
-                                            title="8 characters minimum"
-                                            placeholder="Password"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <input id="reset--password-confirmation--input"
-                                            class="input"
-                                            name="password_confirmation"
-                                            pattern=".{8,64}"
-                                            title="8 characters minimum"
-                                            placeholder="Confirm Password"
-                                            type="password"
-                                            value=""
-                                            required
-                                        />
-                                    </div>
-                                    <div class="form--submit--section">
-                                        <button id="reset--submit"
-                                                class="btn"
-                                                type="submit">Reset</button>
-                                        <view-action action=":password:login" topic=":auth">
-                                            <div class="tab--button">Login instead</div>
-                                        </view-action>
-                                    </div>
-                                </form>
-                                <!-- turnstile -->
-                                <div
-                                    id="cf-turnstile-container"
-                                    class="cf-turnstile"
-                                >
-                                </div> <!-- END turnstile -->
-                            </div> <!-- END password--forms -->
-                            <div id="auth-error--section" class="error">
-                            </div>
-                        </auth-forms>
-                    </div><!-- END auth -->
-
-                    <!-- profile -->
-                    <div id="profile" class="profile">
-                        <div>
-                            <button id="logout--button"
-                                    class="btn"
-                                    type="button">Logout</button>
-
-                        </div>
-                        <div class="list--sub-section app-connections">
-                            <o-auth>
-                                <div class="list--row--outer">
-                                    <div class="list--row--inner list--heading--cont">
-                                        <h2 class="list--sub-heading">Connections</h2>
-                                    </div>
-                                </div>
-                                <div class="list--row--outer">
-                                    <div class="app-connection icon list--row--inner intervals">
-                                        <svg class="app-connection--icon">
-                                            <use href="#icon--intervals"></use>
-                                        </svg>
-                                        <h3 class="app-connection--heading">Intervals.icu</h3>
-
-                                        <view-action action=":intervals:switch"
-                                                     topic=":oauth">
-                                            <div
-                                                id="intervals--connect--button"
-                                                class="app-connection--button">
-                                               Connect
-                                            </div>
-                                        </view-action>
-                                    </div>
-                                </div>
-                                <!-- <div class="list--row--outer">
-                                     <div class="app-connection icon list--row--inner tp">
-                                     <div class="tp-logo">TP</div>
-                                     <h3 class="app-connection--heading">TrainingPeaks</h3>
-                                     <view-action action=":trainingPeaks:switch"
-                                     topic=":oauth">
-                                     <div
-                                     id="tp--connect--button"
-                                     class="app-connection--button">
-                                     Connect
-                                     </div>
-                                     </view-action>
-                                     </div>
-                                     </div> -->
-                                <div class="list--row--outer strava">
-                                    <div class="list--row--inner app-connection logo">
-                                        <!-- <img class="app-connection--logo"
-                                             alt=""
-                                             src="./images/connections/btn_strava_connectwith_orange.svg" /> -->
-                                        <img class="app-connection--logo"
-                                             alt=""
-                                             src="./images/connections/powered-by-strava-logo.svg" />
-                                        <view-action action=":strava:switch"
-                                                     topic=":oauth">
-                                            <div
-                                                id="strava--connect--button"
-                                                class="app-connection--button">
-                                                Connect
-                                            </div>
-                                        </view-action>
-                                    </div>
-                                </div>
-
-
-
-                                <div class="list--row--outer">
-                                    <div class="app-connection icon list--row--inner">
-                                        <img class="app-connection--icon" alt="GC" src="images/connections/garmin-connect.png"/>
-                                        <h3 class="app-connection--heading">Garmin</h3>
-                                        <a class="app-connection--button app-connection--link a"
-                                           href="https://connect.garmin.com/modern/import-data"
-                                           target="_blank">Import</a>
-                                    </div>
-                                </div>
-                            </o-auth>
-                        </div> <!-- end connections -->
-                    </div> <!-- end profile -->
-
-                </div> <!-- end profile--sub-tab -->
-
                 <!-- settings--sub-tab -->
                 <div id="view--settings-settings" class="sub-tab active">
                     <div class="settings-tiles--cont">
@@ -953,6 +759,56 @@
                                     prop="weight">Set</button>
                         </div>
                     </div>
+
+                    <!-- strava -->
+                    <div class="list--sub-section app-connections">
+                        <o-auth>
+                            <div class="list--row--outer strava">
+                                <div class="list--row--inner app-connection logo">
+                                    <img class="app-connection--logo"
+                                         alt=""
+                                         src="./images/connections/powered-by-strava-logo.svg" />
+                                    <view-action action=":strava:switch" topic=":oauth">
+                                        <div id="strava--connect--button" class="app-connection--button">Connect</div>
+                                    </view-action>
+                                </div>
+                            </div>
+                            <div class="list--row--outer strava">
+                                <div class="list--row--inner strava-setup-card">
+                                    <div class="strava-setup-header">
+                                        <h3 class="app-connection--heading">Strava App Setup</h3>
+                                        <button id="strava-open-api-settings" class="app-connection--button" type="button">Open Strava</button>
+                                    </div>
+                                    <p class="strava-setup-copy">
+                                        Create or open your Strava API app, then paste the Client ID and Secret here.
+                                    </p>
+                                    <ol class="strava-setup-steps">
+                                        <li>Open the Strava API settings page.</li>
+                                        <li>Create an app if you do not already have one.</li>
+                                        <li>Set the Authorization Callback Domain to the domain below.</li>
+                                        <li>Paste your Client ID and Client Secret.</li>
+                                    </ol>
+                                    <label class="strava-setup-label" for="strava-callback-url">Callback URL</label>
+                                    <input id="strava-callback-url" class="strava-setup-input" type="text" readonly />
+                                    <div class="strava-setup-grid">
+                                        <div>
+                                            <label class="strava-setup-label" for="strava-client-id-input">Client ID</label>
+                                            <input id="strava-client-id-input" class="strava-setup-input" type="text" placeholder="Strava Client ID" />
+                                        </div>
+                                        <div>
+                                            <label class="strava-setup-label" for="strava-client-secret-input">Client Secret</label>
+                                            <input id="strava-client-secret-input" class="strava-setup-input" type="password" placeholder="Strava Client Secret" />
+                                        </div>
+                                    </div>
+                                    <div class="strava-setup-actions">
+                                        <button id="strava-clear-credentials" class="app-connection--button secondary" type="button">Clear</button>
+                                    </div>
+                                    <p id="strava-setup-status" class="strava-setup-status" aria-live="polite"></p>
+                                </div>
+                            </div>
+                        </o-auth>
+                    </div> <!-- end strava -->
+
                     <div class="settings-btn-row">
 
                         <dock-mode-btn class="flat-btn settings-switch-btn-cont">
@@ -1289,130 +1145,6 @@
                         </div>
                     </div> <!--end ant hrm settings -->
 
-                    <!-- moxy-monitor settings -->
-                    <div class="device-card">
-                        <div class="device-card--cont">
-                            <div class="device-card--header">
-                                <div></div>
-                                <div class="device-card--header--label">Moxy</div>
-                                <battery-level for="ble:smo2">
-                                    <div class="battery--level"></div>
-                                </battery-level>
-                            </div>
-                            <div class="device-card--body">
-                                <div class="device-card--body--row">
-                                    <connection-switch for="ble:smo2"
-                                                    class="connection-icon-switch"
-                                                    indicatorClass="connection-icon-switch--indicator">
-
-                                        <svg class="connection-icon-switch--icon icon">
-                                            <use href="#icon--bluetooth"></use>
-                                        </svg>
-                                        <div class="connection-icon-switch--indicator off"></div>
-                                    </connection-switch>
-                                    <div class="device-card--tile">
-                                        <h3 class="device-card--tile--header">Name</h3>
-                                        <data-view class="data-view device-card--tile--value"
-                                                prop="ble:smo2:name">--</data-view>
-                                    </div>
-                                    <div class="device-card--tile">
-                                        <source-switch class="source-switch"
-                                                    for="smo2"
-                                                    use="ble:smo2">
-                                            <h3 class="device-card--tile--header">SmO2</h3>
-                                            <smo2-value class="data-view device-card--tile--value">--</smo2-value>
-                                            <svg class="toggle--button">
-                                                <use class="on" href="#icon--toggle--on"></use>
-                                                <use class="off" href="#icon--toggle--off"></use>
-                                            </svg>
-                                        </source-switch>
-                                    </div>
-                                    <div class="device-card--tile">
-                                        <source-switch class="source-switch"
-                                                       for="thb"
-                                                       use="ble:smo2">
-                                            <h3 class="device-card--tile--header">THb</h3>
-                                            <thb-value class="data-view device-card--tile--value">--</thb-value>
-                                            <svg class="toggle--button">
-                                                <use class="on" href="#icon--toggle--on"></use>
-                                                <use class="off" href="#icon--toggle--off"></use>
-                                            </svg>
-                                        </source-switch>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div> <!-- end moxy-monitor settings -->
-
-                    <!-- core-temp settings -->
-                    <div class="device-card">
-                        <div class="device-card--cont">
-                            <div class="device-card--header">
-                                <div></div>
-                                <div class="device-card--header--label">CoreTemp</div>
-                                <battery-level for="ble:coreTemp">
-                                    <div class="battery--level"></div>
-                                </battery-level>
-                            </div>
-                            <div class="device-card--body">
-                                <div class="device-card--body--row">
-                                    <connection-switch for="ble:coreTemp"
-                                                    class="connection-icon-switch"
-                                                    indicatorClass="connection-icon-switch--indicator">
-
-                                        <svg class="connection-icon-switch--icon icon">
-                                            <use href="#icon--bluetooth"></use>
-                                        </svg>
-                                        <div class="connection-icon-switch--indicator off"></div>
-                                    </connection-switch>
-                                    <div class="device-card--tile">
-                                        <h3 class="device-card--tile--header">Name</h3>
-                                        <data-view class="data-view device-card--tile--value"
-                                                prop="ble:coreTemp:name">--</data-view>
-                                    </div>
-                                    <div class="device-card--tile">
-                                        <source-switch class="source-switch"
-                                                    for="coreBodyTemperature"
-                                                    use="ble:coreTemp">
-                                            <h3 class="device-card--tile--header">Core</h3>
-                                            <core-body-temperature-value class="data-view device-card--tile--value">--</core-body-temperature-value>
-                                            <svg class="toggle--button">
-                                                <use class="on" href="#icon--toggle--on"></use>
-                                                <use class="off" href="#icon--toggle--off"></use>
-                                            </svg>
-                                        </source-switch>
-                                    </div>
-                                    <div class="device-card--tile">
-                                        <source-switch class="source-switch"
-                                                       for="skinTemperature"
-                                                       use="ble:coreTemp">
-                                            <h3 class="device-card--tile--header">Skin</h3>
-                                            <skin-temperature-value class="data-view device-card--tile--value">--</skin-temperature-value>
-                                            <svg class="toggle--button">
-                                                <use class="on" href="#icon--toggle--on"></use>
-                                                <use class="off" href="#icon--toggle--off"></use>
-                                            </svg>
-                                        </source-switch>
-                                    </div>
-                                    <div class="device-card--tile">
-                                    </div>
-                                    <div class="device-card--tile">
-                                        <source-switch class="source-switch"
-                                                       for="heartRate"
-                                                       use="ble:coreTemp">
-                                            <h3 class="device-card--tile--header">Heart Rate</h3>
-                                            <heart-rate-value class="data-view device-card--tile--value">--</heart-rate-value>
-                                            <svg class="toggle--button">
-                                                <use class="on" href="#icon--toggle--on"></use>
-                                                <use class="off" href="#icon--toggle--off"></use>
-                                            </svg>
-                                        </source-switch>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div> <!-- end moxy-monitor settings -->
-
                     <!-- Options -->
                     <div class="list--sub-section">
                         <div class="list--row--outer">
@@ -1422,7 +1154,7 @@
                         </div>
                         <div class="list--row--outer">
                             <div class="list--row--inner option">
-                                <div class="option--name">Sound</div>
+                                <div class="option--name">Scenic Volume</div>
                                 <sound-control class="option--value sound--row">
                                     <svg id="sound--mute"
                                          class="sound--item control--btn--icon"

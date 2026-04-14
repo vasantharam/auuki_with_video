@@ -328,10 +328,24 @@ xf.reg('ui:workout:upload', async function(files, db) {
     }
 
 });
-xf.reg('watch:stopped', (_, db) => {
+xf.reg('watch:stopped', async (_, db) => {
     try {
-        models.activity.createFromCurrent(db);
+        const record = await models.activity.createFromCurrent(db);
         xf.dispatch('activity:save:success');
+
+        if(models.api.strava.hasLocalClientCredentials() && record?.id) {
+            xf.dispatch('ui:modal:error:open', 'Uploading to Strava...');
+            const result = await models.activity.upload('strava', record.id);
+            if(result === ':success') {
+                xf.dispatch('ui:modal:error:open', 'Strava upload complete.');
+            } else if(result === ':not-connected') {
+                xf.dispatch('ui:modal:error:open', 'Strava app is configured, but not connected yet. Press Strava Connect first.');
+            } else if(result === ':not-configured') {
+                xf.dispatch('ui:modal:error:open', 'Strava upload skipped. Save your Client ID and Client Secret first.');
+            } else {
+                xf.dispatch('ui:modal:error:open', 'Strava upload failed.');
+            }
+        }
     } catch (err) {
         console.error(`Error on activity save: `, err);
         xf.dispatch('activity:save:fail');
@@ -458,4 +472,3 @@ function start () {
 start();
 
 export { db };
-

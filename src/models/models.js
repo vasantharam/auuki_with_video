@@ -525,7 +525,7 @@ class Activity extends Model {
         this.capacity = 7;
     }
     defaultValue() { return []; }
-    createFromCurrent(db) {
+    async createFromCurrent(db) {
         const id = uuid();
         const blob = fileHandler.toBlob(this.encode(db));
         const name = db.workout?.meta?.name ?? 'Powered by Auuki workout';
@@ -544,8 +544,9 @@ class Activity extends Model {
         };
 
         this.add(summary, db.activity);
-        idb.put('activity', record);
+        await idb.put('activity', record);
         xf.dispatch('activity:add', summary);
+        return record;
     }
     add(activity, activityList) {
         activityList.unshift(activity);
@@ -560,6 +561,9 @@ class Activity extends Model {
     }
     async upload(service, id) {
         let record = await idb.get('activity', id);
+        if(!record) {
+            return ':fail';
+        }
 
         if(service === 'strava' ||
            service === 'intervals' ||
@@ -571,8 +575,9 @@ class Activity extends Model {
             await idb.put('activity', record);
 
             xf.dispatch(`action:activity:${id}`, `:${service}:upload${res}`);
+            return res;
         }
-        return;
+        return ':fail';
     }
     async download(id) {
         const self = this;

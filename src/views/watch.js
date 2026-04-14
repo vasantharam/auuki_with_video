@@ -58,10 +58,12 @@ class Watch extends HTMLElement {
         this.maxHistoryPoints = 120;
         this.videoSources = [];
         this.videoIndex = 0;
+        this.routeLap = 1;
         this.currentMultiplier = 1;
         this.csvOptions = ['files'];
         this.selectedCsv = 'files';
         this.watchStatus = 'stopped';
+        this.volume = 100;
         this.isCapturing = false;
         this.$rateIndicator = document.querySelector('#playback-rate-indicator');
         this.$rateBars = this.$rateIndicator
@@ -72,17 +74,39 @@ class Watch extends HTMLElement {
         this.$youtubeFeed = document.querySelector('#youtube-feed');
         this.$youtubeFeedHeader = document.querySelector('.youtube-feed-header');
         this.$youtubeFeedLabel = document.querySelector('#youtube-feed-label');
+        this.$heroRouteLabel = document.querySelector('#home-hero-route-label');
+        this.$motivationPanel = document.querySelector('#video-motivation-panel');
+        this.$motivationText = document.querySelector('#video-motivation-text');
+        this.$routeLapLabel = document.querySelector('#video-route-lap-label');
         this.$intervalLabel = document.querySelector('#video-interval-label');
         this.$workoutPlan = document.querySelector('#video-workout-plan');
         this.$powerGraph = document.querySelector('#video-power-graph polyline');
         this.$heartGraph = document.querySelector('#video-heart-graph polyline');
         this.$videoOverlay = document.querySelector('.video-performance-overlay');
+        this.$routeProgress = document.querySelector('#video-route-progress');
+        this.$routeProgressLabel = document.querySelector('#video-route-progress-label');
+        this.$routeProgressCount = document.querySelector('#video-route-progress-count');
+        this.$routeProgressTrack = document.querySelector('#video-route-progress-track');
+        this.$routeProgressFill = document.querySelector('#video-route-progress-fill');
+        this.$routeProgressMarker = document.querySelector('#video-route-progress-marker');
         this.$videoStage = document.querySelector('.video-stage');
         this.youtubePlayer = null;
         this.youtubePlayerReady = false;
         this.pendingYoutubeFeed = null;
         this.isAdvancingYoutubeFeed = false;
         this.youtubeFeedHistoryKey = 'auuki.youtube-feed-history-v2';
+        this.motivationLines = [
+            'Steady now. Your legs are writing checks your future self will happily cash.',
+            'This interval is just a strongly worded suggestion from your quads.',
+            'Keep turning the pedals. Gravity is already gossiping about you.',
+            'Your trainer thinks this is serious. You can still make it stylish.',
+            'Heart rate up, shoulders down, ego calibrated. That is premium riding.',
+            'You are not stuck indoors. You are conducting a very expensive weather protest.',
+            'Every minute here makes the next climb slightly less dramatic.',
+            'Smooth power. No heroics. Save the cinema for the route videos.',
+            'If your legs complain, remind them they were hired for this.',
+            'You are deep in the zone where excuses lose signal.'
+        ];
         this.youtubeChannels = [
             {
                 label: 'Adventure Every Day',
@@ -121,6 +145,7 @@ class Watch extends HTMLElement {
         xf.sub(`db:intervalDuration`, this.onIntervalDuration, this.signal);
         xf.sub(`db:intervalIndex`, this.onIntervalIndex, this.signal);
         xf.sub(`db:workout`, this.onWorkout, this.signal);
+        xf.sub(`db:volume`, this.onVolume.bind(this), this.signal);
 
         const heroVideo = document.querySelector('#home-hero-video');
         this.$heroVideo = heroVideo;
@@ -128,11 +153,13 @@ class Watch extends HTMLElement {
         const videoEl = heroVideo?.querySelector('video');
         if (heroVideo && videoEl) {
             videoEl.addEventListener('ended', this.onVideoEnded.bind(this), this.signal);
+            videoEl.addEventListener('loadedmetadata', this.updateResponsiveLayout, this.signal);
         }
         if (typeof ResizeObserver !== 'undefined') {
             this.overlayResizeObserver = new ResizeObserver(() => {
                 this.updateResponsiveLayout();
                 this.updateOverlayClearance();
+                this.updateMotivationPanel();
             });
             this.$heroVideo && this.overlayResizeObserver.observe(this.$heroVideo);
             this.$fixedBottom && this.overlayResizeObserver.observe(this.$fixedBottom);
@@ -141,14 +168,17 @@ class Watch extends HTMLElement {
         window.addEventListener('resize', () => {
             this.updateResponsiveLayout();
             this.updateOverlayClearance();
+            this.updateMotivationPanel();
         }, this.signal);
 
         this.$csvSelector = document.querySelector('#video-csv-selector');
         this.renderCsvSelector();
         this.loadCsvOptions();
         this.updatePlaybackIndicator(this.getPlaybackRate());
+        this.updateRouteProgress();
         this.updateResponsiveLayout();
         this.updateOverlayClearance();
+        this.updateMotivationPanel();
     }
     disconnectedCallback() {
         this.youtubePlayer?.destroy?.();
@@ -170,65 +200,29 @@ class Watch extends HTMLElement {
     }
     onSave(e)  { xf.dispatch('ui:activity:save'); }
     async onSnapshot(e) {
-        if (this.isCapturing) return;
-        if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
-            console.warn('Screen capture not supported in this browser.');
-            return;
-        }
-
+        if(this.isCapturing) return;
         this.isCapturing = true;
-        let stream;
         try {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    frameRate: 30,
-                    displaySurface: 'browser',
-                    preferCurrentTab: true,
-                    selfBrowserSurface: 'include',
-                },
-                audio: false,
-            });
-
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            await this.sleep(2000);
-            await this.captureSnapshotFromStream(stream, timestamp);
-        } catch (err) {
-            console.warn('Screen capture canceled or failed.', err);
-        } finally {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            const blob = await this.captureSnapshot();
+            if(blob) {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                this.downloadBlob(blob, `auuki-snapshot-${timestamp}.png`);
             }
+        } catch(err) {
+            console.warn('Snapshot failed.', err);
+        } finally {
             this.isCapturing = false;
         }
     }
     async onRecord(e) {
-        if (this.isCapturing) return;
-        if (!navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) {
-            console.warn('Screen capture not supported in this browser.');
-            return;
-        }
-
+        if(this.isCapturing) return;
         this.isCapturing = true;
-        let stream;
         try {
-            stream = await navigator.mediaDevices.getDisplayMedia({
-                video: {
-                    frameRate: 30,
-                    displaySurface: 'browser',
-                    preferCurrentTab: true,
-                    selfBrowserSurface: 'include',
-                },
-                audio: false,
-            });
-
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            await this.captureVideoFromStream(stream, timestamp, 10000);
-        } catch (err) {
-            console.warn('Screen capture canceled or failed.', err);
+            await this.captureVideoFromCanvas(timestamp, 10000);
+        } catch(err) {
+            console.warn('Video capture failed.', err);
         } finally {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-            }
             this.isCapturing = false;
         }
     }
@@ -247,6 +241,7 @@ class Watch extends HTMLElement {
             this.renderStopped(this.dom);
             this.stopVideoPlayback();
         }
+        this.syncYoutubeFeedPlayback();
     }
     onWorkoutStatus(status) {
         if(status === 'started') { this.renderWorkoutStarted(this.dom); }
@@ -362,7 +357,7 @@ class Watch extends HTMLElement {
                 host: 'https://www.youtube-nocookie.com',
                 videoId: initialFeed.videoId,
                 playerVars: {
-                    autoplay: 1,
+                    autoplay: this.watchStatus === 'started' ? 1 : 0,
                     controls: 1,
                     playsinline: 1,
                     rel: 0,
@@ -414,10 +409,26 @@ class Watch extends HTMLElement {
         });
         return Watch.youtubeApiPromise;
     }
+    onVolume(volume) {
+        this.volume = volume;
+        if(!this.youtubePlayer || !this.youtubePlayerReady) return;
+        if(volume <= 0) {
+            this.youtubePlayer.mute?.();
+        } else {
+            this.youtubePlayer.unMute?.();
+            this.youtubePlayer.setVolume?.(volume);
+        }
+    }
     onYoutubePlayerReady(event) {
         this.youtubePlayerReady = true;
-        event.target.mute();
+        if(this.volume <= 0) {
+            event.target.mute();
+        } else {
+            event.target.unMute();
+            event.target.setVolume(this.volume);
+        }
         this.loadPendingYoutubeFeed();
+        this.syncYoutubeFeedPlayback();
     }
     onYoutubePlayerStateChange(event) {
         if(event?.data !== window.YT?.PlayerState?.ENDED || this.isAdvancingYoutubeFeed) {
@@ -435,11 +446,17 @@ class Watch extends HTMLElement {
         if(this.$youtubeFeedLabel) {
             this.$youtubeFeedLabel.textContent = channel.label;
         }
-        this.youtubePlayer.loadVideoById({
-            videoId,
-            startSeconds,
-        });
-        this.youtubePlayer.mute();
+        if(this.watchStatus === 'started') {
+            this.youtubePlayer.loadVideoById({
+                videoId,
+                startSeconds,
+            });
+        } else {
+            this.youtubePlayer.cueVideoById({
+                videoId,
+                startSeconds,
+            });
+        }
         this.pendingYoutubeFeed = null;
     }
     loadPendingYoutubeFeedFallback() {
@@ -449,7 +466,7 @@ class Watch extends HTMLElement {
             <iframe
                 class="youtube-feed-player-frame"
                 title="Scenic YouTube feed"
-                src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&start=${startSeconds}&cacheBust=${Date.now()}"
+                src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=${this.watchStatus === 'started' ? 1 : 0}&mute=0&controls=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1&start=${startSeconds}&origin=${encodeURIComponent(window.location.origin)}&cacheBust=${Date.now()}"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 referrerpolicy="strict-origin-when-cross-origin"
                 allowfullscreen>
@@ -459,6 +476,36 @@ class Watch extends HTMLElement {
             this.$youtubeFeedLabel.textContent = channel.label;
         }
         this.pendingYoutubeFeed = null;
+    }
+    postYoutubeIframeCommand(func) {
+        const iframe = this.$youtubeFeedPlayer?.querySelector('iframe');
+        if(!iframe?.contentWindow) return;
+        iframe.contentWindow.postMessage(JSON.stringify({
+            event: 'command',
+            func,
+            args: [],
+        }), 'https://www.youtube-nocookie.com');
+    }
+    playYoutubeFeed() {
+        if(this.youtubePlayerReady && this.youtubePlayer) {
+            this.youtubePlayer.playVideo?.();
+            return;
+        }
+        this.postYoutubeIframeCommand('playVideo');
+    }
+    pauseYoutubeFeed() {
+        if(this.youtubePlayerReady && this.youtubePlayer) {
+            this.youtubePlayer.pauseVideo?.();
+            return;
+        }
+        this.postYoutubeIframeCommand('pauseVideo');
+    }
+    syncYoutubeFeedPlayback() {
+        if(this.watchStatus === 'started') {
+            this.playYoutubeFeed();
+            return;
+        }
+        this.pauseYoutubeFeed();
     }
     updateResponsiveLayout() {
         if(!this.$videoStage || !this.$youtubeFeed || !this.$heroVideo) return;
@@ -482,19 +529,27 @@ class Watch extends HTMLElement {
         }
 
         const stageWidth = this.$videoStage.clientWidth;
+        const heroVideoEl = this.$heroVideo?.querySelector('video');
         const gap = 13; // 0.8rem at the app's base font sizing
         const scenicShare = window.innerWidth >= 2100 ? 0.54 : window.innerWidth >= 1500 ? 0.5 : 0.47;
         const minMainWidth = 360;
         const minScenicWidth = 520;
-        const scenicWidth = Math.max(
+        const sourceMaxWidth = heroVideoEl?.videoWidth > 0
+            ? Math.max(minMainWidth, heroVideoEl.videoWidth)
+            : Infinity;
+        const scenicWidth = Math.min(sourceMaxWidth, Math.max(
             minScenicWidth,
             Math.min(stageWidth * scenicShare, stageWidth - minMainWidth - gap)
+        ));
+        const mainWidth = Math.min(
+            sourceMaxWidth,
+            Math.max(minMainWidth, stageWidth - scenicWidth - gap)
         );
-        const mainWidth = Math.max(minMainWidth, stageWidth - scenicWidth - gap);
 
         this.$videoStage.style.setProperty('display', 'flex', 'important');
         this.$videoStage.style.setProperty('gap', `${gap}px`, 'important');
         this.$videoStage.style.setProperty('align-items', 'stretch', 'important');
+        this.$videoStage.style.setProperty('justify-content', 'center', 'important');
         this.$videoStage.style.setProperty('grid-template-columns', `${mainWidth}px ${scenicWidth}px`, 'important');
         this.$youtubeFeed.style.setProperty('width', `${scenicWidth}px`, 'important');
         this.$youtubeFeed.style.setProperty('min-width', `${scenicWidth}px`, 'important');
@@ -530,6 +585,7 @@ class Watch extends HTMLElement {
     onElapsed(elapsed) {
         this.elapsed = elapsed;
         this.renderOverlayGraph();
+        this.updateMotivationPanel();
     }
     onLapTime(lapTime) {
         this.lapTime = lapTime;
@@ -551,6 +607,9 @@ class Watch extends HTMLElement {
         const currentInterval = this.workoutIntervals[this.intervalIndex] ?? null;
         const intervalName = currentInterval?.name ?? currentInterval?.type ?? `Interval ${this.intervalIndex + 1}`;
 
+        if(this.$routeLapLabel) {
+            this.$routeLapLabel.textContent = `Lap ${this.routeLap}`;
+        }
         if(this.$intervalLabel) {
             this.$intervalLabel.textContent = intervalName;
         }
@@ -563,6 +622,44 @@ class Watch extends HTMLElement {
         if(this.$heartGraph) {
             this.$heartGraph.setAttribute('points', this.toSparklinePoints(this.heartHistory, 190));
         }
+    }
+    getCurrentMotivationLine() {
+        const lines = this.motivationLines ?? [];
+        if(lines.length === 0) return '';
+        const bucket = Math.floor((this.elapsed ?? 0) / 45);
+        const routeOffset = this.csvOptions.indexOf(this.selectedCsv);
+        const index = Math.abs(bucket + (routeOffset >= 0 ? routeOffset : 0)) % lines.length;
+        return lines[index];
+    }
+    updateMotivationPanel() {
+        if(!this.$motivationPanel || !this.$motivationText || !this.$csvSelector || !this.$videoOverlay) return;
+
+        if(window.innerWidth < 1100) {
+            this.$motivationPanel.hidden = true;
+            return;
+        }
+
+        const selectorRect = this.$csvSelector.getBoundingClientRect();
+        const overlayRect = this.$videoOverlay.getBoundingClientRect();
+        const gap = selectorRect.top - overlayRect.bottom;
+        const minGap = 120;
+
+        if(gap < minGap) {
+            this.$motivationPanel.hidden = true;
+            this.$motivationPanel.style.removeProperty('top');
+            this.$motivationPanel.style.removeProperty('width');
+            this.$motivationPanel.style.removeProperty('max-height');
+            return;
+        }
+
+        const top = Math.round(overlayRect.bottom + 12);
+        const width = Math.round(Math.min(window.innerWidth - 40, Math.max(selectorRect.width + 160, 420)));
+        const maxHeight = Math.max(88, Math.round(gap - 24));
+        this.$motivationText.textContent = this.getCurrentMotivationLine();
+        this.$motivationPanel.hidden = false;
+        this.$motivationPanel.style.top = `${top}px`;
+        this.$motivationPanel.style.width = `${width}px`;
+        this.$motivationPanel.style.maxHeight = `${maxHeight}px`;
     }
     onCadence(cadence) {
         this.cadence = cadence;
@@ -614,15 +711,29 @@ class Watch extends HTMLElement {
             elapsedBeforeCurrent += Math.max(this.workoutIntervals[i]?.duration ?? 0, 0);
         }
 
-        const absoluteElapsed = elapsedBeforeCurrent + Math.max(this.lapTime ?? 0, 0);
+        const currentIntervalDuration = Math.max(this.intervalDuration ?? currentInterval?.duration ?? 0, 0);
+        const remainingInInterval = Math.max(this.lapTime ?? 0, 0);
+        const elapsedInInterval = Math.max(0, currentIntervalDuration - remainingInInterval);
+        const absoluteElapsed = elapsedBeforeCurrent + elapsedInInterval;
         const markerLeft = Math.max(0, Math.min(100, (absoluteElapsed / totalDuration) * 100));
+
+        const zoneColorForTarget = (target) => {
+            if(target < 0.55) return 'var(--zone-gray)';
+            if(target < 0.75) return 'var(--zone-blue)';
+            if(target < 0.9) return 'var(--zone-teal)';
+            if(target < 1.05) return 'var(--zone-green)';
+            if(target < 1.2) return 'var(--zone-yellow)';
+            if(target < 1.5) return 'var(--zone-orange)';
+            return 'var(--zone-red)';
+        };
 
         const segments = this.workoutIntervals.map((interval) => {
             const duration = Math.max(interval?.duration ?? 0, 0);
             const width = (duration / totalDuration) * 100;
             const target = Math.max(interval?.power ?? 0, interval?.steps?.[0]?.power ?? 0, 0);
-            const opacity = 0.25 + Math.min(target, 1.2) * 0.5;
-            return `<div class="video-overlay-plan-segment" style="width:${width}%;background:rgba(248, 199, 58, ${opacity.toFixed(3)});"></div>`;
+            const height = 24 + Math.min(target, 1.5) / 1.5 * 76;
+            const color = zoneColorForTarget(target);
+            return `<div class="video-overlay-plan-segment" style="width:${width}%;height:${height.toFixed(1)}%;background:${color};"></div>`;
         }).join('');
 
         return `${segments}<div class="video-overlay-plan-marker" style="left:${markerLeft}%;"></div>`;
@@ -641,8 +752,18 @@ class Watch extends HTMLElement {
                 </label>
             `;
         }).join('');
+        const currentRoute = this.formatRouteName(selected || 'Route') || 'Route';
+        if(this.$heroRouteLabel) {
+            this.$heroRouteLabel.textContent = currentRoute;
+        }
+        if(this.$motivationText) {
+            this.$motivationText.textContent = this.getCurrentMotivationLine();
+        }
         this.$csvSelector.innerHTML = `
-            <h4>Virtual AI Routes</h4>
+            <div class="video-csv-selector-header">
+                <h4>AI Routes</h4>
+                <span class="video-csv-selector-current">${currentRoute}</span>
+            </div>
             <div class="video-csv-list">
                 ${list || '<div>No playlists found</div>'}
             </div>
@@ -653,10 +774,45 @@ class Watch extends HTMLElement {
                 if(value !== this.selectedCsv) {
                     this.selectedCsv = value;
                     this.videoIndex = 0;
+                    this.routeLap = 1;
+                    this.updateRouteProgress();
+                    this.renderOverlayGraph();
                     this.loadVideoManifest(this.selectedCsv);
+                    this.updateMotivationPanel();
                 }
             }, this.signal);
         });
+        this.updateMotivationPanel();
+    }
+    formatRouteName(name = '') {
+        return `${name}`
+            .replace(/\.csv$/i, '')
+            .replace(/[_-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    updateRouteProgress() {
+        if(!this.$routeProgress) return;
+
+        const total = this.videoSources.length;
+        const currentIndex = total > 0 ? this.videoIndex % total : 0;
+        const progress = total > 0 ? currentIndex / total : 0;
+
+        if(this.$routeProgressLabel) {
+            this.$routeProgressLabel.textContent = this.formatRouteName(this.selectedCsv || 'Route') || 'Route';
+        }
+        if(this.$routeProgressCount) {
+            this.$routeProgressCount.textContent = total > 0 ? `${currentIndex + 1} / ${total}` : '0 / 0';
+        }
+        if(this.$routeProgressFill) {
+            this.$routeProgressFill.style.strokeDasharray = `${progress * 100} 100`;
+        }
+        if(this.$routeProgressTrack && this.$routeProgressMarker) {
+            const totalLength = this.$routeProgressTrack.getTotalLength();
+            const point = this.$routeProgressTrack.getPointAtLength(totalLength * progress);
+            this.$routeProgressMarker.setAttribute('cx', `${point.x}`);
+            this.$routeProgressMarker.setAttribute('cy', `${point.y}`);
+        }
     }
     async loadCsvOptions() {
         const nextOptions = [];
@@ -699,6 +855,7 @@ class Watch extends HTMLElement {
             }
         }
         this.renderCsvSelector();
+        this.updateRouteProgress();
         if(this.selectedCsv) {
             await this.loadVideoManifest(this.selectedCsv);
         }
@@ -721,7 +878,10 @@ class Watch extends HTMLElement {
                 if(entries.length > 0) {
                     this.videoSources = entries;
                     this.videoIndex = 0;
+                    this.routeLap = 1;
                     this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                    this.updateRouteProgress();
+                    this.renderOverlayGraph();
                     const heroVideo = document.querySelector('#home-hero-video');
                     const videoEl = heroVideo?.querySelector('video');
                     if (heroVideo && videoEl) {
@@ -743,7 +903,13 @@ class Watch extends HTMLElement {
         const heroVideo = document.querySelector('#home-hero-video');
         const videoEl = heroVideo?.querySelector('video');
         if (heroVideo && videoEl && this.videoSources.length > 0) {
-            this.videoIndex = (this.videoIndex + 1) % this.videoSources.length;
+            const nextIndex = (this.videoIndex + 1) % this.videoSources.length;
+            if(nextIndex === 0) {
+                this.routeLap += 1;
+            }
+            this.videoIndex = nextIndex;
+            this.updateRouteProgress();
+            this.renderOverlayGraph();
             this.ensureVideoSource(videoEl);
             videoEl.currentTime = 0;
             const rate = this.getPlaybackRate();
@@ -844,63 +1010,119 @@ class Watch extends HTMLElement {
         }
     }
 
-    async captureSnapshotFromStream(stream, timestamp) {
-        const track = stream.getVideoTracks()[0];
+    async captureSnapshot() {
+        const videoEl = this.$heroVideo?.querySelector('video');
+        if(!videoEl || !videoEl.videoWidth) return null;
+
         const canvas = document.createElement('canvas');
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
         const ctx = canvas.getContext('2d');
-        if (!ctx || !track) return;
+        if(!ctx) return null;
 
-        if ('ImageCapture' in window) {
-            const imageCapture = new ImageCapture(track);
-            const bitmap = await imageCapture.grabFrame();
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            ctx.drawImage(bitmap, 0, 0);
-        } else {
-            const video = document.createElement('video');
-            video.srcObject = stream;
-            video.muted = true;
-            await video.play();
-            await new Promise(requestAnimationFrame);
-            canvas.width = video.videoWidth || 1280;
-            canvas.height = video.videoHeight || 720;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            video.pause();
-        }
+        ctx.drawImage(videoEl, 0, 0);
+        this.drawHudOnCanvas(ctx, canvas.width, canvas.height);
 
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-        if (blob) {
-            this.downloadBlob(blob, `auuki-snapshot-${timestamp}.png`);
-        }
+        return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     }
 
-    async captureVideoFromStream(stream, timestamp, durationMs) {
-        const chunks = [];
+    async captureVideoFromCanvas(timestamp, durationMs) {
+        const videoEl = this.$heroVideo?.querySelector('video');
+        if(!videoEl || !videoEl.videoWidth) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if(!ctx) return;
+
+        let rafId;
+        const drawFrame = () => {
+            ctx.drawImage(videoEl, 0, 0);
+            this.drawHudOnCanvas(ctx, canvas.width, canvas.height);
+            rafId = requestAnimationFrame(drawFrame);
+        };
+        rafId = requestAnimationFrame(drawFrame);
+
+        const mimeType = [
+            'video/mp4;codecs=avc1',   // Chrome 108+ — H.264 MP4, best compatibility
+            'video/mp4',               // Chrome, broad fallback
+            'video/webm;codecs=vp9',
+            'video/webm;codecs=vp8',
+            'video/webm',
+        ].find(t => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
+
+        const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+
+        const stream = canvas.captureStream(30);
         let recorder;
         try {
-            recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-        } catch (err) {
+            recorder = new MediaRecorder(stream, { mimeType });
+        } catch(err) {
             recorder = new MediaRecorder(stream);
         }
+
+        const chunks = [];
+        recorder.addEventListener('dataavailable', e => {
+            if(e.data?.size > 0) chunks.push(e.data);
+        });
 
         const stopped = new Promise(resolve => {
             recorder.addEventListener('stop', resolve, { once: true });
         });
 
-        recorder.addEventListener('dataavailable', event => {
-            if (event.data && event.data.size > 0) {
-                chunks.push(event.data);
-            }
-        });
-
         recorder.start();
-        setTimeout(() => recorder.stop(), durationMs);
+        await this.sleep(durationMs);
+        cancelAnimationFrame(rafId);
+        recorder.stop();
         await stopped;
 
-        const blob = new Blob(chunks, { type: recorder.mimeType || 'video/webm' });
-        if (blob.size > 0) {
-            this.downloadBlob(blob, `auuki-clip-${timestamp}.webm`);
+        const blob = new Blob(chunks, { type: recorder.mimeType ?? mimeType });
+        if(blob.size > 0) {
+            this.downloadBlob(blob, `auuki-clip-${timestamp}.${ext}`);
         }
+    }
+
+    drawHudOnCanvas(ctx, w, h) {
+        const barH = Math.round(h * 0.11);
+        const y = h - barH;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.58)';
+        ctx.fillRect(0, y, w, barH);
+
+        const valSize = Math.round(barH * 0.46);
+        const lblSize = Math.round(barH * 0.28);
+        const midY = y + barH * 0.5;
+
+        const cols = [
+            { label: 'POWER',   value: `${this.power1s ?? '--'}w` },
+            { label: 'HR',      value: `${this.heartRate ?? '--'}` },
+            { label: 'CADENCE', value: `${this.cadence ?? '--'}` },
+            { label: 'TIME',    value: this.formatSeconds(this.elapsed ?? 0) },
+        ];
+
+        const colW = w / cols.length;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        cols.forEach((col, i) => {
+            const cx = colW * i + colW / 2;
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.font = `${lblSize}px system-ui, sans-serif`;
+            ctx.fillText(col.label, cx, midY - valSize * 0.42);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${valSize}px system-ui, sans-serif`;
+            ctx.fillText(col.value, cx, midY + lblSize * 0.7);
+        });
+    }
+
+    formatSeconds(total) {
+        const s = Math.floor(total);
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        if(h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        return `${m}:${String(sec).padStart(2,'0')}`;
     }
 
     downloadBlob(blob, filename) {

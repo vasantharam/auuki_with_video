@@ -14,7 +14,8 @@ function API() {
     const router = Router();
 
     async function start() {
-        router.start();
+        await router.start();
+        await strava.restore();
     }
 
     function stop() {
@@ -113,4 +114,3 @@ function Router(args = {}) {
 
 
 export default API;
-

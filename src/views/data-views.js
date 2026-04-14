@@ -2,6 +2,7 @@ import { xf, exists, existance, validate, equals, isNumber, last, empty, avg, to
 import { formatTime } from '../utils.js';
 import { models } from '../models/models.js';
 import { DialogMsg } from '../models/enums.js';
+import config from '../models/config.js';
 
 
 //
@@ -1259,10 +1260,6 @@ class NavigationStack extends HTMLElement {
                         $view: document.querySelector(`#view--settings-settings`),
                         $link: document.querySelector(`#link--settings-settings`),
                     },
-                    profile: {
-                        $view: document.querySelector(`#view--settings-profile`),
-                        $link: document.querySelector(`#link--settings-profile`),
-                    }
                 }
             },
             home: {
@@ -1314,12 +1311,6 @@ class NavigationStack extends HTMLElement {
             this.switch('settings', this.tabs.settings.children);
             return;
         }
-        if(action === 'settings:profile') {
-            this.switch('profile', this.tabs.settings.children);
-            models.api.auth.loadTurnstile();
-            return;
-        }
-
         if(action === 'workouts:workouts') {
             this.switch('workouts', this.tabs.workouts.children);
             return;
@@ -1458,6 +1449,9 @@ customElements.define('navigation-action', NavigationAction);
 class OAuth extends HTMLElement {
     constructor() {
         super();
+        this.onOpenStravaApiSettings = this.onOpenStravaApiSettings.bind(this);
+        this.onStravaCredentialsInput = this.onStravaCredentialsInput.bind(this);
+        this.onClearStravaCredentials = this.onClearStravaCredentials.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -1468,9 +1462,27 @@ class OAuth extends HTMLElement {
         this.$stravaButton = self.querySelector('#strava--connect--button');
         this.$intervalsButton = self.querySelector('#intervals--connect--button');
         this.$tpButton = self.querySelector('#tp--connect--button');
+        this.$stravaOpenApiSettings = self.querySelector('#strava-open-api-settings');
+        this.$stravaClientIdInput = self.querySelector('#strava-client-id-input');
+        this.$stravaClientSecretInput = self.querySelector('#strava-client-secret-input');
+        this.$stravaCallbackUrl = self.querySelector('#strava-callback-url');
+        this.$stravaClearCredentials = self.querySelector('#strava-clear-credentials');
+        this.$stravaSetupStatus = self.querySelector('#strava-setup-status');
+        this.$stravaGuideDialog = document.querySelector('#dialog--strava-guide');
+        this.$stravaGuideOpenApi = document.querySelector('#strava-guide-open-api');
+        this.$stravaGuideClose = document.querySelector('#strava-guide-close');
 
         xf.sub('action:oauth', self.onAction.bind(this), this.signal);
         xf.sub('db:services', self.onServices.bind(this), this.signal);
+
+        this.$stravaOpenApiSettings?.addEventListener('click', this.onOpenStravaApiSettings, this.signal);
+        this.$stravaClientIdInput?.addEventListener('input', this.onStravaCredentialsInput, this.signal);
+        this.$stravaClientSecretInput?.addEventListener('input', this.onStravaCredentialsInput, this.signal);
+        this.$stravaClearCredentials?.addEventListener('click', this.onClearStravaCredentials, this.signal);
+        this.$stravaGuideOpenApi?.addEventListener('click', this.onOpenStravaApiSettings, this.signal);
+        this.$stravaGuideClose?.addEventListener('click', () => this.$stravaGuideDialog?.close(), this.signal);
+
+        this.renderStravaSetup();
     }
     disconnectedCallback() {
         this.abortController.abort();
@@ -1493,9 +1505,39 @@ class OAuth extends HTMLElement {
             if(this.services[service]) {
                 models.api[service].disconnect();
             } else {
+                if(service === 'strava') {
+                    const { clientId, clientSecret } = config.getStravaCredentials();
+                    if(!clientId || !clientSecret) {
+                        this.$stravaGuideDialog?.showModal();
+                        return;
+                    }
+                }
                 models.api[service].connect();
             }
             return;
+        }
+    }
+    onOpenStravaApiSettings() {
+        window.open('https://www.strava.com/settings/api', '_blank', 'noopener,noreferrer');
+    }
+    onStravaCredentialsInput() {
+        window.clearTimeout(this.stravaCredentialSaveTimeout);
+        this.stravaCredentialSaveTimeout = window.setTimeout(() => {
+            const clientId = this.$stravaClientIdInput?.value ?? '';
+            const clientSecret = this.$stravaClientSecretInput?.value ?? '';
+            config.setStravaCredentials({clientId, clientSecret});
+            if(this.$stravaSetupStatus) {
+                this.$stravaSetupStatus.textContent = clientId.trim() || clientSecret.trim()
+                    ? 'Saved credential in the browser local cache.'
+                    : 'No local Strava app credentials saved yet.';
+            }
+        }, 180);
+    }
+    onClearStravaCredentials() {
+        config.clearStravaCredentials();
+        this.renderStravaSetup();
+        if(this.$stravaSetupStatus) {
+            this.$stravaSetupStatus.textContent = 'Local Strava app settings cleared.';
         }
     }
     render(services) {
@@ -1507,6 +1549,23 @@ class OAuth extends HTMLElement {
         }
         if(exists(this.$tpButton)) {
             this.$tpButton.textContent = services.tp ? 'Disconnect' : 'Connect';
+        }
+    }
+    renderStravaSetup() {
+        const { clientId, clientSecret } = config.getStravaCredentials();
+        if(this.$stravaClientIdInput) {
+            this.$stravaClientIdInput.value = clientId;
+        }
+        if(this.$stravaClientSecretInput) {
+            this.$stravaClientSecretInput.value = clientSecret;
+        }
+        if(this.$stravaCallbackUrl) {
+            this.$stravaCallbackUrl.value = config.get().PWA_URI;
+        }
+        if(this.$stravaSetupStatus) {
+            this.$stravaSetupStatus.textContent = clientId
+                ? 'Saved credential in the browser local cache.'
+                : 'No local Strava app credentials saved yet.';
         }
     }
 }
@@ -1545,8 +1604,8 @@ class ModalError extends HTMLElement {
     message(msg) {
         if(msg === DialogMsg.noAuth) {
             return `Your session is over. You need to login again.`;
-        };
-        return '';
+        }
+        return `${msg ?? ''}`;
     }
 }
 
