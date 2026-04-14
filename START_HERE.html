@@ -108,6 +108,20 @@
   a { color: #fc4c02; text-decoration: none; }
   a:hover { text-decoration: underline; }
   .tip { font-size: .85rem; color: #666; margin-top: .4rem; }
+  .dl-btn {
+    display: inline-block;
+    margin-top: .4rem;
+    padding: .5rem 1.1rem;
+    background: #fc4c02;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: .9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .dl-btn:hover { background: #e04400; }
 </style>
 </head>
 <body>
@@ -131,7 +145,8 @@
       <div class="step-num">1</div>
       <div class="step-body">
         <strong>Download the launcher</strong>
-        <p>Download <a href="https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.sh">setup.sh</a> and save it somewhere easy to find (e.g. your Desktop).</p>
+        <p>Click the button below to download <code>setup.sh</code>, then save it somewhere easy to find (e.g. your Desktop).</p>
+        <p><button class="dl-btn" onclick="dl('https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.sh','setup.sh',this)">⬇ Download setup.sh</button></p>
       </div>
     </div>
 
@@ -181,7 +196,8 @@
       <div class="step-num">1</div>
       <div class="step-body">
         <strong>Download the launcher</strong>
-        <p>Download <a href="https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.sh">setup.sh</a> and save it (e.g. your home folder).</p>
+        <p>Click below to download <code>setup.sh</code> and save it (e.g. your home folder).</p>
+        <p><button class="dl-btn" onclick="dl('https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.sh','setup.sh',this)">⬇ Download setup.sh</button></p>
       </div>
     </div>
 
@@ -222,8 +238,10 @@
       <div class="step-body">
         <strong>Download both launcher files</strong>
         <p>Save these two files in the <strong>same folder</strong> (e.g. your Desktop):</p>
-        <p>→ <a href="https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.bat">setup.bat</a></p>
-        <p>→ <a href="https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.ps1">setup.ps1</a></p>
+        <p>
+          <button class="dl-btn" onclick="dl('https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.bat','setup.bat',this)">⬇ Download setup.bat</button>
+          <button class="dl-btn" onclick="dl('https://raw.githubusercontent.com/vasantharam/auuki_with_video/main/setup.ps1','setup.ps1',this)" style="margin-left:.5rem">⬇ Download setup.ps1</button>
+        </p>
       </div>
     </div>
 
@@ -283,6 +301,24 @@ function copy(btn) {
         btn.textContent = 'copied!';
         setTimeout(() => btn.textContent = 'copy', 1500);
     });
+}
+async function dl(url, filename, el) {
+    const orig = el.textContent;
+    el.textContent = 'downloading…';
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.status);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        el.textContent = 'downloaded ✓';
+    } catch(e) {
+        el.textContent = 'failed — try right-click → Save link as';
+    }
+    setTimeout(() => el.textContent = orig, 3000);
 }
 </script>
 </body>
