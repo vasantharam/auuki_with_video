@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Auuki setup + launcher — Mac and Linux
-# Usage: bash setup.sh
+# Auuki launcher — Mac and Linux
+# First run: downloads and extracts the app, then starts it.
+# To update: delete the auuki_with_video-main folder and run again.
 
-set -e
-
-REPO_URL="https://github.com/vasantharam/auuki_with_video.git"
-REPO_DIR="auuki_with_video"
+ZIP_URL="https://github.com/vasantharam/auuki_with_video/archive/refs/heads/main.zip"
+APP_DIR="auuki_with_video-main"
 PORT=3000
 
 BOLD='\033[1m'
@@ -19,54 +18,37 @@ echo -e "${BOLD}  Auuki — indoor cycling app${NC}"
 echo "  ============================="
 echo ""
 
-# ── git ──────────────────────────────────────────────────────────────────────
-if ! command -v git &>/dev/null; then
-    echo -e "${RED}Git is not installed.${NC}"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "  Install it by running:  xcode-select --install"
+# ── download and extract if not present ───────────────────────────────────────
+if [ ! -d "$APP_DIR" ]; then
+    echo -e "${GREEN}Downloading Auuki (this may take a moment)...${NC}"
+
+    if command -v curl &>/dev/null; then
+        curl -L --progress-bar -o auuki.zip "$ZIP_URL"
+    elif command -v wget &>/dev/null; then
+        wget -q --show-progress -O auuki.zip "$ZIP_URL"
     else
-        echo "  Install it by running:  sudo apt install git"
-        echo "  (or your distro's package manager equivalent)"
+        echo -e "${RED}curl or wget is required to download Auuki.${NC}"
+        echo "Install curl:  sudo apt install curl   (Linux)"
+        echo "              brew install curl        (Mac)"
+        exit 1
     fi
-    exit 1
+
+    echo "Extracting..."
+    unzip -q auuki.zip
+    rm auuki.zip
+    echo -e "${GREEN}Done.${NC}"
+    echo ""
 fi
 
-# ── clone or update ───────────────────────────────────────────────────────────
-if [ -d "$REPO_DIR/.git" ]; then
-    echo -e "${GREEN}Updating Auuki...${NC}"
-    git -C "$REPO_DIR" pull --ff-only
-else
-    echo -e "${GREEN}Downloading Auuki...${NC}"
-    git clone "$REPO_URL" "$REPO_DIR"
-fi
-
-cd "$REPO_DIR"
+cd "$APP_DIR"
 
 # ── find a server ─────────────────────────────────────────────────────────────
-serve_python3() {
-    python3 -m http.server "$PORT" --directory dist --bind 127.0.0.1
-}
-serve_node() {
-    # npx serve handles range requests and correct MIME types
-    npx --yes serve dist --listen "$PORT" --no-clipboard
-}
-serve_fallback() {
-    echo ""
-    echo -e "${RED}No suitable server found.${NC}"
-    echo ""
-    echo "  Please install Python 3 and try again:"
-    echo "    Mac:    https://www.python.org/downloads/"
-    echo "    Linux:  sudo apt install python3"
-    echo ""
-    exit 1
-}
-
-echo ""
 echo -e "${GREEN}Starting Auuki on http://localhost:${PORT}${NC}"
 echo "  Press Ctrl+C to stop."
+echo -e "  ${YELLOW}To update: delete the '${APP_DIR}' folder and run this script again.${NC}"
 echo ""
 
-# open browser in background after a short delay
+# open browser in background
 if [[ "$OSTYPE" == "darwin"* ]]; then
     (sleep 1.5 && open "http://localhost:${PORT}") &
 elif command -v xdg-open &>/dev/null; then
@@ -74,9 +56,14 @@ elif command -v xdg-open &>/dev/null; then
 fi
 
 if command -v python3 &>/dev/null; then
-    serve_python3
-elif command -v node &>/dev/null && command -v npm &>/dev/null; then
-    serve_node
+    python3 -m http.server "$PORT" --directory dist --bind 127.0.0.1
+elif command -v python &>/dev/null; then
+    cd dist && python -m SimpleHTTPServer "$PORT"
+elif command -v npx &>/dev/null; then
+    npx --yes serve dist --listen "$PORT" --no-clipboard
 else
-    serve_fallback
+    echo -e "${RED}No server found. Please install Python 3 and try again:${NC}"
+    echo "  Mac:    https://www.python.org/downloads/"
+    echo "  Linux:  sudo apt install python3"
+    exit 1
 fi
