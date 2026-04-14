@@ -38,7 +38,7 @@ function convertMp4ToMov(mp4Path, movPath) {
 }
 
 async function main() {
-    const directory = './'; // Start searching from the current directory
+    const directory = '/Users/yourusername/Downloads'; // Update to your Downloads directory
     try {
         const mp4Path = await findMp4File(directory);
         console.log(`Found MP4 file: ${mp4Path}`);
