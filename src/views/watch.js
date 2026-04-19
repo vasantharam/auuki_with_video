@@ -837,6 +837,10 @@ class Watch extends HTMLElement {
             .replace(/\s+/g, ' ')
             .trim();
     }
+    resolveVideoAsset(path = '') {
+        if(!path) return '';
+        return new URL(`../videos/${path}`, import.meta.url).toString();
+    }
     updateRouteProgress() {
         if(!this.$routeProgress) return;
 
@@ -864,7 +868,7 @@ class Watch extends HTMLElement {
         const nextOptions = [];
         try {
             // Prefer a simple text manifest listing CSV files (one per line).
-            const resTxt = await fetch('./videos/routes.txt');
+            const resTxt = await fetch(this.resolveVideoAsset('routes.txt'));
             if(resTxt.ok) {
                 const text = await resTxt.text();
                 text.split(/\r?\n/)
@@ -880,7 +884,7 @@ class Watch extends HTMLElement {
         }
         if(nextOptions.length === 0) {
             try {
-                const res = await fetch('./videos/csv-index.json');
+                const res = await fetch(this.resolveVideoAsset('csv-index.json'));
                 if(res.ok) {
                     const list = await res.json();
                     if(Array.isArray(list) && list.length > 0) {
@@ -910,8 +914,11 @@ class Watch extends HTMLElement {
         try {
             const combinedEntry = await this.loadCombinedRouteEntry(csvName);
             if(combinedEntry) {
-                this.videoSources = combinedEntry.segments ?? [];
-                this.routeVideoSrc = combinedEntry.src ?? null;
+                this.videoSources = (combinedEntry.segments ?? []).map(segment => ({
+                    ...segment,
+                    src: this.resolveVideoAsset(segment.src),
+                }));
+                this.routeVideoSrc = combinedEntry.src ? this.resolveVideoAsset(combinedEntry.src) : null;
                 this.routeSegmentEnds = [];
                 let elapsed = 0;
                 this.videoSources.forEach(segment => {
@@ -940,7 +947,7 @@ class Watch extends HTMLElement {
                 return;
             }
 
-            const res = await fetch(`./videos/${csvName}.csv`);
+            const res = await fetch(this.resolveVideoAsset(`${csvName}.csv`));
             if(res.ok) {
                 const text = await res.text();
                 const entries = text
@@ -949,7 +956,7 @@ class Watch extends HTMLElement {
                     .filter(line => line && !line.startsWith('#'))
                     .map(line => line.split(',').map(x => x.trim()))
                     .map(([file, multiplier]) => ({
-                        src: `./videos/${file}`,
+                        src: this.resolveVideoAsset(file),
                         multiplier: isNaN(parseFloat(multiplier)) ? 1 : parseFloat(multiplier),
                     }))
                     .filter(entry => entry.src && entry.src.endsWith('.mp4'));
@@ -986,7 +993,7 @@ class Watch extends HTMLElement {
         }
         if(this.combinedRouteManifest === null) {
             try {
-                const res = await fetch('./videos/combined-manifest.json');
+                const res = await fetch(this.resolveVideoAsset('combined-manifest.json'));
                 this.combinedRouteManifest = res.ok ? await res.json() : undefined;
             } catch(e) {
                 console.warn('combined-manifest.json not available, using segmented routes', e);

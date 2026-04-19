@@ -199,13 +199,13 @@ def build_route(csv_name: str):
         concat_segments(concat_list, output_path)
 
     return {
-        "src": f"./videos/combined/{output_path.name}",
+        "src": f"combined/{output_path.name}",
         "width": profile["width"],
         "height": profile["height"],
         "fps": profile["fps"],
         "segments": [
             {
-                "src": f"./videos/{segment['file']}",
+                "src": segment["file"],
                 "multiplier": segment["multiplier"],
                 "duration": segment["duration"],
             }
