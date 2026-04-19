@@ -63,6 +63,7 @@ class Watch extends HTMLElement {
         this.routeVideoSrc = null;
         this.routeSegmentEnds = [];
         this.combinedRouteManifest = null;
+        this.routeVideoLoadToken = 0;
         this.routeLap = 1;
         this.currentMultiplier = 1;
         this.prefetchLinks = [];
@@ -160,6 +161,7 @@ class Watch extends HTMLElement {
         this.$routeVideoEl = videoEl ?? null;
         if (heroVideo && videoEl) {
             videoEl.dataset.videoSrc = '';
+            videoEl.preload = 'auto';
             videoEl.addEventListener('ended', this.onVideoEnded, this.signal);
             videoEl.addEventListener('loadedmetadata', this.onVideoLoadedMetadata, this.signal);
             videoEl.addEventListener('timeupdate', this.onVideoTimeUpdate, this.signal);
@@ -327,6 +329,80 @@ class Watch extends HTMLElement {
             return;
         }
         videoEl.pause();
+    }
+    waitForVideoReady(videoEl, expectedSrc, timeoutMs = 12000) {
+        if(!videoEl || !expectedSrc || videoEl.dataset.videoSrc !== expectedSrc) {
+            return Promise.resolve(false);
+        }
+        if(videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            return Promise.resolve(true);
+        }
+
+        return new Promise((resolve) => {
+            let settled = false;
+            const cleanup = () => {
+                videoEl.removeEventListener('loadeddata', onReady);
+                videoEl.removeEventListener('canplay', onReady);
+                videoEl.removeEventListener('error', onError);
+                window.clearTimeout(timeoutId);
+            };
+            const finish = (value) => {
+                if(settled) return;
+                settled = true;
+                cleanup();
+                resolve(value);
+            };
+            const onReady = () => finish(videoEl.dataset.videoSrc === expectedSrc);
+            const onError = () => finish(false);
+            const timeoutId = window.setTimeout(() => finish(false), timeoutMs);
+
+            videoEl.addEventListener('loadeddata', onReady, { ...this.signal, once: true });
+            videoEl.addEventListener('canplay', onReady, { ...this.signal, once: true });
+            videoEl.addEventListener('error', onError, { ...this.signal, once: true });
+        });
+    }
+    async prepareVideoPreview(videoEl) {
+        const expectedSrc = videoEl?.dataset.videoSrc;
+        if(!videoEl || !expectedSrc) return;
+        const loadToken = this.routeVideoLoadToken;
+        videoEl.load();
+
+        let ready = await this.waitForVideoReady(videoEl, expectedSrc, 4000);
+        if(!ready && this.watchStatus !== 'started' && loadToken === this.routeVideoLoadToken) {
+            try {
+                const playPromise = videoEl.play();
+                if(playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(() => {});
+                }
+            } catch(err) {
+                // Ignore autoplay timing failures; the loadeddata fallback still applies.
+            }
+            ready = await this.waitForVideoReady(videoEl, expectedSrc, 12000);
+        }
+
+        if(loadToken !== this.routeVideoLoadToken || videoEl.dataset.videoSrc !== expectedSrc || this.watchStatus === 'started') {
+            return;
+        }
+        videoEl.pause();
+        if(ready) {
+            try {
+                videoEl.currentTime = 0;
+            } catch(err) {
+                // Ignore seek failures before metadata is fully available.
+            }
+        }
+    }
+    async startRouteVideo(videoEl, resetTime = true) {
+        if(!videoEl) return;
+        const expectedSrc = videoEl.dataset.videoSrc;
+        if(!expectedSrc) return;
+        const loadToken = this.routeVideoLoadToken;
+        videoEl.load();
+        await this.waitForVideoReady(videoEl, expectedSrc);
+        if(loadToken !== this.routeVideoLoadToken || videoEl.dataset.videoSrc !== expectedSrc || this.watchStatus !== 'started') {
+            return;
+        }
+        this.applyPlaybackState(videoEl, { shouldPlay: true, resetTime });
     }
     setupYoutubeFeed() {
         if(!this.$youtubeFeedPlayer) return;
@@ -940,8 +1016,7 @@ class Watch extends HTMLElement {
                     if(this.watchStatus === 'started') {
                         this.startVideoPlayback();
                     } else {
-                        videoEl.pause();
-                        videoEl.currentTime = 0;
+                        this.prepareVideoPreview(videoEl);
                     }
                 }
                 return;
@@ -978,7 +1053,7 @@ class Watch extends HTMLElement {
                         if (this.watchStatus === 'started') {
                             this.startVideoPlayback();
                         } else {
-                            videoEl.pause();
+                            this.prepareVideoPreview(videoEl);
                         }
                     }
                 }
@@ -1054,9 +1129,9 @@ class Watch extends HTMLElement {
         if (!src) return;
         this.currentMultiplier = entry?.multiplier ?? 1;
         if (videoEl.dataset.videoSrc !== src) {
+            this.routeVideoLoadToken += 1;
             videoEl.dataset.videoSrc = src;
             videoEl.setAttribute('src', src);
-            videoEl.load();
         }
     }
     getPlaybackRate() {
@@ -1089,7 +1164,7 @@ class Watch extends HTMLElement {
         const videoEl = this.$routeVideoEl;
         if (heroVideo && videoEl && this.videoSources.length > 0) {
             this.ensureVideoSource(videoEl);
-            this.applyPlaybackState(videoEl, { shouldPlay: true, resetTime: true });
+            this.startRouteVideo(videoEl, true);
         }
     }
 
