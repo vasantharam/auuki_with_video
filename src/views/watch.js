@@ -818,7 +818,7 @@ class Watch extends HTMLElement {
         const nextOptions = [];
         try {
             // Prefer a simple text manifest listing CSV files (one per line).
-            const resTxt = await fetch('/videos/routes.txt');
+            const resTxt = await fetch('./videos/routes.txt');
             if(resTxt.ok) {
                 const text = await resTxt.text();
                 text.split(/\r?\n/)
@@ -834,7 +834,7 @@ class Watch extends HTMLElement {
         }
         if(nextOptions.length === 0) {
             try {
-                const res = await fetch('/videos/csv-index.json');
+                const res = await fetch('./videos/csv-index.json');
                 if(res.ok) {
                     const list = await res.json();
                     if(Array.isArray(list) && list.length > 0) {
@@ -862,7 +862,7 @@ class Watch extends HTMLElement {
     }
     async loadVideoManifest(csvName = 'files') {
         try {
-            const res = await fetch(`/videos/${csvName}.csv`);
+            const res = await fetch(`./videos/${csvName}.csv`);
             if(res.ok) {
                 const text = await res.text();
                 const entries = text
@@ -871,7 +871,7 @@ class Watch extends HTMLElement {
                     .filter(line => line && !line.startsWith('#'))
                     .map(line => line.split(',').map(x => x.trim()))
                     .map(([file, multiplier]) => ({
-                        src: `/videos/${file}`,
+                        src: `./videos/${file}`,
                         multiplier: isNaN(parseFloat(multiplier)) ? 1 : parseFloat(multiplier),
                     }))
                     .filter(entry => entry.src && entry.src.endsWith('.mp4'));
