@@ -1,2 +1,3 @@
-scenic road.csv
-Auuki_suburb.csv
+AI_Norway_Forest.csv
+AI_Global_Forest.csv
+AI_Suburb.csv
