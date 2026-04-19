@@ -27,6 +27,7 @@ class Watch extends HTMLElement {
         this.updateResponsiveLayout = this.updateResponsiveLayout.bind(this);
         this.onYoutubePlayerReady = this.onYoutubePlayerReady.bind(this);
         this.onYoutubePlayerStateChange = this.onYoutubePlayerStateChange.bind(this);
+        this.onVideoLoadedMetadata = this.onVideoLoadedMetadata.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -58,6 +59,7 @@ class Watch extends HTMLElement {
         this.maxHistoryPoints = 120;
         this.videoSources = [];
         this.videoIndex = 0;
+        this.activeVideoBufferIndex = 0;
         this.routeLap = 1;
         this.currentMultiplier = 1;
         this.prefetchLinks = [];
@@ -152,9 +154,15 @@ class Watch extends HTMLElement {
         this.$heroVideo = heroVideo;
         this.$fixedBottom = document.querySelector('.fixed-bottom');
         const videoEl = heroVideo?.querySelector('video');
-        if (heroVideo && videoEl) {
-            videoEl.addEventListener('ended', this.onVideoEnded.bind(this), this.signal);
-            videoEl.addEventListener('loadedmetadata', this.updateResponsiveLayout, this.signal);
+        const mediaEl = heroVideo?.querySelector('.home-hero-media');
+        if (heroVideo && videoEl && mediaEl) {
+            this.$videoBuffers = [videoEl, this.createBufferedVideo(videoEl)];
+            this.$videoBuffers.forEach((buffer, index) => {
+                if(index === 1) {
+                    mediaEl.insertBefore(buffer, this.$rateIndicator ?? null);
+                }
+                this.setupVideoBuffer(buffer, index);
+            });
         }
         if (typeof ResizeObserver !== 'undefined') {
             this.overlayResizeObserver = new ResizeObserver(() => {
@@ -283,6 +291,111 @@ class Watch extends HTMLElement {
     renderWorkoutStarted(dom) {
         // dom.workout.style.display = 'none';
     };
+    createBufferedVideo(template) {
+        const clone = template.cloneNode(false);
+        clone.removeAttribute('src');
+        clone.preload = 'auto';
+        clone.setAttribute('src', 'about:blank');
+        return clone;
+    }
+    setupVideoBuffer(videoEl, index) {
+        videoEl.dataset.bufferIndex = `${index}`;
+        videoEl.dataset.videoSrc = '';
+        videoEl.preload = 'auto';
+        videoEl.style.position = 'absolute';
+        videoEl.style.inset = '0';
+        videoEl.style.opacity = index === this.activeVideoBufferIndex ? '1' : '0';
+        videoEl.style.pointerEvents = 'none';
+        videoEl.style.transition = 'opacity 120ms linear';
+        videoEl.style.zIndex = '0';
+        videoEl.addEventListener('ended', this.onVideoEnded, this.signal);
+        videoEl.addEventListener('loadedmetadata', this.onVideoLoadedMetadata, this.signal);
+    }
+    getActiveVideoEl() {
+        return this.$videoBuffers?.[this.activeVideoBufferIndex] ?? null;
+    }
+    getStandbyVideoEl() {
+        if(!this.$videoBuffers || this.$videoBuffers.length < 2) return null;
+        return this.$videoBuffers[(this.activeVideoBufferIndex + 1) % this.$videoBuffers.length];
+    }
+    onVideoLoadedMetadata(event) {
+        if(event.currentTarget === this.getActiveVideoEl()) {
+            this.updateResponsiveLayout();
+        }
+    }
+    applyPlaybackState(videoEl, { shouldPlay = false, resetTime = false } = {}) {
+        if(!videoEl) return;
+        if(resetTime) {
+            videoEl.currentTime = 0;
+        }
+        const rate = this.getPlaybackRate();
+        videoEl.playbackRate = rate;
+        this.updatePlaybackIndicator(rate);
+        if(shouldPlay) {
+            const playPromise = videoEl.play();
+            if(playPromise && typeof playPromise.catch === 'function') {
+                playPromise.catch(() => {});
+            }
+            return;
+        }
+        videoEl.pause();
+    }
+    showActiveVideoBuffer() {
+        this.$videoBuffers?.forEach((buffer, index) => {
+            const active = index === this.activeVideoBufferIndex;
+            buffer.style.opacity = active ? '1' : '0';
+            buffer.style.visibility = active ? 'visible' : 'hidden';
+        });
+    }
+    preloadVideoIntoBuffer(videoEl, entry) {
+        if(!videoEl || !entry?.src) return;
+        if(videoEl.dataset.videoSrc === entry.src) return;
+        videoEl.dataset.videoSrc = entry.src;
+        videoEl.setAttribute('src', entry.src);
+        videoEl.load();
+    }
+    preloadUpcomingVideo() {
+        if(this.videoSources.length === 0) return;
+        const standbyVideo = this.getStandbyVideoEl();
+        const nextIndex = (this.videoIndex + 1) % this.videoSources.length;
+        this.preloadVideoIntoBuffer(standbyVideo, this.videoSources[nextIndex]);
+    }
+    activateVideoBuffer(nextVideoEl) {
+        if(!nextVideoEl) return;
+        const nextBufferIndex = Number(nextVideoEl.dataset.bufferIndex ?? 0);
+        const previousVideo = this.getActiveVideoEl();
+        this.activeVideoBufferIndex = nextBufferIndex;
+        this.currentMultiplier = this.videoSources[this.videoIndex]?.multiplier ?? 1;
+        this.showActiveVideoBuffer();
+        this.applyPlaybackState(nextVideoEl, { shouldPlay: this.watchStatus === 'started', resetTime: true });
+        if(previousVideo && previousVideo !== nextVideoEl) {
+            previousVideo.pause();
+            previousVideo.currentTime = 0;
+        }
+        this.preloadUpcomingVideo();
+    }
+    queueNextVideoSwap() {
+        const nextVideo = this.getStandbyVideoEl();
+        const nextEntry = this.videoSources[this.videoIndex];
+        if(!nextVideo || !nextEntry) return;
+
+        const swapWhenReady = () => {
+            nextVideo.removeEventListener('canplay', swapWhenReady);
+            if(this.videoSources[this.videoIndex]?.src !== nextEntry.src) return;
+            this.activateVideoBuffer(nextVideo);
+        };
+
+        if(nextVideo.dataset.videoSrc !== nextEntry.src) {
+            this.preloadVideoIntoBuffer(nextVideo, nextEntry);
+        }
+
+        if(nextVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            this.activateVideoBuffer(nextVideo);
+            return;
+        }
+
+        nextVideo.addEventListener('canplay', swapWhenReady, { ...this.signal, once: true });
+    }
     setupYoutubeFeed() {
         if(!this.$youtubeFeedPlayer) return;
         const { channel, videoId } = this.pickYoutubeFeed();
@@ -885,9 +998,11 @@ class Watch extends HTMLElement {
                     this.updateRouteProgress();
                     this.renderOverlayGraph();
                     const heroVideo = document.querySelector('#home-hero-video');
-                    const videoEl = heroVideo?.querySelector('video');
+                    const videoEl = this.getActiveVideoEl();
                     if (heroVideo && videoEl) {
                         this.ensureVideoSource(videoEl);
+                        this.preloadUpcomingVideo();
+                        this.showActiveVideoBuffer();
                         heroVideo.classList.add('active');
                         if (this.watchStatus === 'started') {
                             this.startVideoPlayback();
@@ -918,9 +1033,8 @@ class Watch extends HTMLElement {
         }
     }
     onVideoEnded() {
-        const heroVideo = document.querySelector('#home-hero-video');
-        const videoEl = heroVideo?.querySelector('video');
-        if (heroVideo && videoEl && this.videoSources.length > 0) {
+        const videoEl = this.getActiveVideoEl();
+        if (videoEl && this.videoSources.length > 0) {
             const nextIndex = (this.videoIndex + 1) % this.videoSources.length;
             if(nextIndex === 0) {
                 this.routeLap += 1;
@@ -929,19 +1043,15 @@ class Watch extends HTMLElement {
             this.prefetchNextVideos();
             this.updateRouteProgress();
             this.renderOverlayGraph();
-            this.ensureVideoSource(videoEl);
-            videoEl.currentTime = 0;
-            const rate = this.getPlaybackRate();
-            videoEl.playbackRate = rate;
-            this.updatePlaybackIndicator(rate);
-            videoEl.play();
+            this.queueNextVideoSwap();
         }
     }
     ensureVideoSource(videoEl) {
         const entry = this.videoSources[this.videoIndex];
         if (!entry) return;
         this.currentMultiplier = entry.multiplier ?? 1;
-        if (videoEl.getAttribute('src') !== entry.src) {
+        if (videoEl.dataset.videoSrc !== entry.src) {
+            videoEl.dataset.videoSrc = entry.src;
             videoEl.setAttribute('src', entry.src);
             videoEl.load();
         }
@@ -964,46 +1074,31 @@ class Watch extends HTMLElement {
         return clamped;
     }
     updatePlaybackRate() {
-        const heroVideo = document.querySelector('#home-hero-video');
-        const videoEl = heroVideo?.querySelector('video');
         const rate = this.getPlaybackRate();
-        if (heroVideo && videoEl) {
-            videoEl.playbackRate = rate;
-        }
+        this.getActiveVideoEl() && (this.getActiveVideoEl().playbackRate = rate);
+        this.getStandbyVideoEl() && (this.getStandbyVideoEl().playbackRate = rate);
         this.updatePlaybackIndicator(rate);
     }
 
     startVideoPlayback() {
         const heroVideo = document.querySelector('#home-hero-video');
-        const videoEl = heroVideo?.querySelector('video');
+        const videoEl = this.getActiveVideoEl();
         if (heroVideo && videoEl && this.videoSources.length > 0) {
             this.ensureVideoSource(videoEl);
-            videoEl.currentTime = 0;
-            const rate = this.getPlaybackRate();
-            videoEl.playbackRate = rate;
-            this.updatePlaybackIndicator(rate);
-            const playPromise = videoEl.play();
-            if (playPromise && typeof playPromise.catch === 'function') {
-                playPromise.catch(() => {});
-            }
+            this.applyPlaybackState(videoEl, { shouldPlay: true, resetTime: true });
+            this.preloadUpcomingVideo();
         }
     }
 
     pauseVideoPlayback() {
-        const heroVideo = document.querySelector('#home-hero-video');
-        const videoEl = heroVideo?.querySelector('video');
-        if (heroVideo && videoEl) {
-            videoEl.pause();
-        }
+        this.$videoBuffers?.forEach(videoEl => videoEl.pause());
     }
 
     stopVideoPlayback() {
-        const heroVideo = document.querySelector('#home-hero-video');
-        const videoEl = heroVideo?.querySelector('video');
-        if (heroVideo && videoEl) {
+        this.$videoBuffers?.forEach(videoEl => {
             videoEl.pause();
             videoEl.currentTime = 0;
-        }
+        });
     }
 
     updatePlaybackIndicator(rate) {
@@ -1030,7 +1125,7 @@ class Watch extends HTMLElement {
     }
 
     async captureSnapshot() {
-        const videoEl = this.$heroVideo?.querySelector('video');
+        const videoEl = this.getActiveVideoEl();
         if(!videoEl || !videoEl.videoWidth) return null;
 
         const canvas = document.createElement('canvas');
@@ -1046,7 +1141,7 @@ class Watch extends HTMLElement {
     }
 
     async captureVideoFromCanvas(timestamp, durationMs) {
-        const videoEl = this.$heroVideo?.querySelector('video');
+        const videoEl = this.getActiveVideoEl();
         if(!videoEl || !videoEl.videoWidth) return;
 
         const canvas = document.createElement('canvas');
