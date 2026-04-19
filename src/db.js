@@ -445,9 +445,8 @@ xf.reg('app:start', async function(_, db) {
 
     await models.api.start();
 
-    // If Strava has saved credentials but couldn't auto-connect, go to Settings
-    // and animate the Strava section.
-    if (!db.services.strava && models.api.strava.hasLocalClientCredentials()) {
+    // If Strava is not connected, start on Settings and focus the Strava setup.
+    if (!db.services.strava) {
         xf.dispatch('ui:page-set', 'settings');
         setTimeout(() => {
             const $stravaSection = document.getElementById('strava-section');
