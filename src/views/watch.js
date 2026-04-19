@@ -28,6 +28,7 @@ class Watch extends HTMLElement {
         this.onYoutubePlayerReady = this.onYoutubePlayerReady.bind(this);
         this.onYoutubePlayerStateChange = this.onYoutubePlayerStateChange.bind(this);
         this.onVideoLoadedMetadata = this.onVideoLoadedMetadata.bind(this);
+        this.onVideoTimeUpdate = this.onVideoTimeUpdate.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -59,9 +60,9 @@ class Watch extends HTMLElement {
         this.maxHistoryPoints = 120;
         this.videoSources = [];
         this.videoIndex = 0;
-        this.activeVideoBufferIndex = 0;
-        this.videoCrossfadeMs = 220;
-        this.videoSwapTimer = null;
+        this.routeVideoSrc = null;
+        this.routeSegmentEnds = [];
+        this.combinedRouteManifest = null;
         this.routeLap = 1;
         this.currentMultiplier = 1;
         this.prefetchLinks = [];
@@ -156,15 +157,12 @@ class Watch extends HTMLElement {
         this.$heroVideo = heroVideo;
         this.$fixedBottom = document.querySelector('.fixed-bottom');
         const videoEl = heroVideo?.querySelector('video');
-        const mediaEl = heroVideo?.querySelector('.home-hero-media');
-        if (heroVideo && videoEl && mediaEl) {
-            this.$videoBuffers = [videoEl, this.createBufferedVideo(videoEl)];
-            this.$videoBuffers.forEach((buffer, index) => {
-                if(index === 1) {
-                    mediaEl.insertBefore(buffer, this.$rateIndicator ?? null);
-                }
-                this.setupVideoBuffer(buffer, index);
-            });
+        this.$routeVideoEl = videoEl ?? null;
+        if (heroVideo && videoEl) {
+            videoEl.dataset.videoSrc = '';
+            videoEl.addEventListener('ended', this.onVideoEnded, this.signal);
+            videoEl.addEventListener('loadedmetadata', this.onVideoLoadedMetadata, this.signal);
+            videoEl.addEventListener('timeupdate', this.onVideoTimeUpdate, this.signal);
         }
         if (typeof ResizeObserver !== 'undefined') {
             this.overlayResizeObserver = new ResizeObserver(() => {
@@ -293,37 +291,24 @@ class Watch extends HTMLElement {
     renderWorkoutStarted(dom) {
         // dom.workout.style.display = 'none';
     };
-    createBufferedVideo(template) {
-        const clone = template.cloneNode(false);
-        clone.removeAttribute('src');
-        clone.preload = 'auto';
-        clone.setAttribute('src', 'about:blank');
-        return clone;
-    }
-    setupVideoBuffer(videoEl, index) {
-        videoEl.dataset.bufferIndex = `${index}`;
-        videoEl.dataset.videoSrc = '';
-        videoEl.preload = 'auto';
-        videoEl.style.position = 'absolute';
-        videoEl.style.inset = '0';
-        videoEl.style.opacity = index === this.activeVideoBufferIndex ? '1' : '0';
-        videoEl.style.pointerEvents = 'none';
-        videoEl.style.visibility = index === this.activeVideoBufferIndex ? 'visible' : 'hidden';
-        videoEl.style.transition = `opacity ${this.videoCrossfadeMs}ms ease`;
-        videoEl.style.zIndex = '0';
-        videoEl.addEventListener('ended', this.onVideoEnded, this.signal);
-        videoEl.addEventListener('loadedmetadata', this.onVideoLoadedMetadata, this.signal);
-    }
-    getActiveVideoEl() {
-        return this.$videoBuffers?.[this.activeVideoBufferIndex] ?? null;
-    }
-    getStandbyVideoEl() {
-        if(!this.$videoBuffers || this.$videoBuffers.length < 2) return null;
-        return this.$videoBuffers[(this.activeVideoBufferIndex + 1) % this.$videoBuffers.length];
-    }
     onVideoLoadedMetadata(event) {
-        if(event.currentTarget === this.getActiveVideoEl()) {
+        if(event.currentTarget === this.$routeVideoEl) {
             this.updateResponsiveLayout();
+        }
+    }
+    onVideoTimeUpdate(event) {
+        if(!this.routeVideoSrc || this.routeSegmentEnds.length === 0) return;
+        const currentTime = event.currentTarget.currentTime ?? 0;
+        let nextIndex = this.routeSegmentEnds.findIndex(endTime => currentTime < endTime);
+        if(nextIndex < 0) {
+            nextIndex = Math.max(0, this.routeSegmentEnds.length - 1);
+        }
+        if(nextIndex !== this.videoIndex) {
+            this.videoIndex = nextIndex;
+            this.currentMultiplier = this.videoSources[nextIndex]?.multiplier ?? 1;
+            this.updateRouteProgress();
+            this.renderOverlayGraph();
+            this.updatePlaybackRate();
         }
     }
     applyPlaybackState(videoEl, { shouldPlay = false, resetTime = false } = {}) {
@@ -342,94 +327,6 @@ class Watch extends HTMLElement {
             return;
         }
         videoEl.pause();
-    }
-    showActiveVideoBuffer() {
-        this.$videoBuffers?.forEach((buffer, index) => {
-            const active = index === this.activeVideoBufferIndex;
-            buffer.style.opacity = active ? '1' : '0';
-            buffer.style.visibility = active ? 'visible' : 'hidden';
-        });
-    }
-    setVideoBufferVisibility(videoEl, visible) {
-        if(!videoEl) return;
-        videoEl.style.opacity = visible ? '1' : '0';
-        videoEl.style.visibility = visible ? 'visible' : 'hidden';
-    }
-    preloadVideoIntoBuffer(videoEl, entry) {
-        if(!videoEl || !entry?.src) return;
-        if(videoEl.dataset.videoSrc === entry.src) return;
-        videoEl.dataset.videoSrc = entry.src;
-        videoEl.setAttribute('src', entry.src);
-        videoEl.load();
-    }
-    preloadUpcomingVideo() {
-        if(this.videoSources.length === 0) return;
-        const standbyVideo = this.getStandbyVideoEl();
-        const nextIndex = (this.videoIndex + 1) % this.videoSources.length;
-        this.preloadVideoIntoBuffer(standbyVideo, this.videoSources[nextIndex]);
-    }
-    activateVideoBuffer(nextVideoEl) {
-        if(!nextVideoEl) return;
-        const nextBufferIndex = Number(nextVideoEl.dataset.bufferIndex ?? 0);
-        const previousVideo = this.getActiveVideoEl();
-        this.activeVideoBufferIndex = nextBufferIndex;
-        this.currentMultiplier = this.videoSources[this.videoIndex]?.multiplier ?? 1;
-        if(this.videoSwapTimer) {
-            clearTimeout(this.videoSwapTimer);
-            this.videoSwapTimer = null;
-        }
-
-        this.setVideoBufferVisibility(nextVideoEl, false);
-        this.applyPlaybackState(nextVideoEl, { shouldPlay: false, resetTime: true });
-
-        const finalizeSwap = () => {
-            if(previousVideo && previousVideo !== nextVideoEl) {
-                previousVideo.pause();
-                previousVideo.currentTime = 0;
-                this.setVideoBufferVisibility(previousVideo, false);
-            }
-            this.videoSwapTimer = null;
-            this.preloadUpcomingVideo();
-        };
-
-        if(previousVideo && previousVideo !== nextVideoEl) {
-            this.setVideoBufferVisibility(previousVideo, true);
-        }
-        this.setVideoBufferVisibility(nextVideoEl, true);
-
-        if(this.watchStatus === 'started') {
-            const playPromise = nextVideoEl.play();
-            if(playPromise && typeof playPromise.then === 'function') {
-                playPromise.then(() => {
-                    this.videoSwapTimer = window.setTimeout(finalizeSwap, this.videoCrossfadeMs);
-                }).catch(() => finalizeSwap());
-                return;
-            }
-        }
-
-        this.videoSwapTimer = window.setTimeout(finalizeSwap, this.videoCrossfadeMs);
-    }
-    queueNextVideoSwap() {
-        const nextVideo = this.getStandbyVideoEl();
-        const nextEntry = this.videoSources[this.videoIndex];
-        if(!nextVideo || !nextEntry) return;
-
-        const swapWhenReady = () => {
-            nextVideo.removeEventListener('canplay', swapWhenReady);
-            if(this.videoSources[this.videoIndex]?.src !== nextEntry.src) return;
-            this.activateVideoBuffer(nextVideo);
-        };
-
-        if(nextVideo.dataset.videoSrc !== nextEntry.src) {
-            this.preloadVideoIntoBuffer(nextVideo, nextEntry);
-        }
-
-        if(nextVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-            this.activateVideoBuffer(nextVideo);
-            return;
-        }
-
-        nextVideo.addEventListener('canplay', swapWhenReady, { ...this.signal, once: true });
     }
     setupYoutubeFeed() {
         if(!this.$youtubeFeedPlayer) return;
@@ -1011,6 +908,38 @@ class Watch extends HTMLElement {
     }
     async loadVideoManifest(csvName = 'files') {
         try {
+            const combinedEntry = await this.loadCombinedRouteEntry(csvName);
+            if(combinedEntry) {
+                this.videoSources = combinedEntry.segments ?? [];
+                this.routeVideoSrc = combinedEntry.src ?? null;
+                this.routeSegmentEnds = [];
+                let elapsed = 0;
+                this.videoSources.forEach(segment => {
+                    elapsed += Math.max(segment.duration ?? 0, 0);
+                    this.routeSegmentEnds.push(elapsed);
+                });
+                this.videoIndex = 0;
+                this.routeLap = 1;
+                this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                this.prefetchLinks.forEach(l => l.remove());
+                this.prefetchLinks = [];
+                this.updateRouteProgress();
+                this.renderOverlayGraph();
+                const heroVideo = document.querySelector('#home-hero-video');
+                const videoEl = this.$routeVideoEl;
+                if(heroVideo && videoEl) {
+                    this.ensureVideoSource(videoEl);
+                    heroVideo.classList.add('active');
+                    if(this.watchStatus === 'started') {
+                        this.startVideoPlayback();
+                    } else {
+                        videoEl.pause();
+                        videoEl.currentTime = 0;
+                    }
+                }
+                return;
+            }
+
             const res = await fetch(`./videos/${csvName}.csv`);
             if(res.ok) {
                 const text = await res.text();
@@ -1025,6 +954,8 @@ class Watch extends HTMLElement {
                     }))
                     .filter(entry => entry.src && entry.src.endsWith('.mp4'));
                 if(entries.length > 0) {
+                    this.routeVideoSrc = null;
+                    this.routeSegmentEnds = [];
                     this.videoSources = entries;
                     this.videoIndex = 0;
                     this.routeLap = 1;
@@ -1033,11 +964,9 @@ class Watch extends HTMLElement {
                     this.updateRouteProgress();
                     this.renderOverlayGraph();
                     const heroVideo = document.querySelector('#home-hero-video');
-                    const videoEl = this.getActiveVideoEl();
+                    const videoEl = this.$routeVideoEl;
                     if (heroVideo && videoEl) {
                         this.ensureVideoSource(videoEl);
-                        this.preloadUpcomingVideo();
-                        this.showActiveVideoBuffer();
                         heroVideo.classList.add('active');
                         if (this.watchStatus === 'started') {
                             this.startVideoPlayback();
@@ -1050,6 +979,21 @@ class Watch extends HTMLElement {
         } catch(e) {
             console.error('Error loading video manifest', e);
         }
+    }
+    async loadCombinedRouteEntry(csvName) {
+        if(this.combinedRouteManifest === undefined) {
+            return null;
+        }
+        if(this.combinedRouteManifest === null) {
+            try {
+                const res = await fetch('./videos/combined-manifest.json');
+                this.combinedRouteManifest = res.ok ? await res.json() : undefined;
+            } catch(e) {
+                console.warn('combined-manifest.json not available, using segmented routes', e);
+                this.combinedRouteManifest = undefined;
+            }
+        }
+        return this.combinedRouteManifest?.[csvName] ?? null;
     }
     prefetchNextVideos(count = 4) {
         this.prefetchLinks.forEach(l => l.remove());
@@ -1068,8 +1012,23 @@ class Watch extends HTMLElement {
         }
     }
     onVideoEnded() {
-        const videoEl = this.getActiveVideoEl();
+        const videoEl = this.$routeVideoEl;
         if (videoEl && this.videoSources.length > 0) {
+            if(this.routeVideoSrc) {
+                this.routeLap += 1;
+                this.videoIndex = 0;
+                this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                this.updateRouteProgress();
+                this.renderOverlayGraph();
+                videoEl.currentTime = 0;
+                if(this.watchStatus === 'started') {
+                    const playPromise = videoEl.play();
+                    if(playPromise && typeof playPromise.catch === 'function') {
+                        playPromise.catch(() => {});
+                    }
+                }
+                return;
+            }
             const nextIndex = (this.videoIndex + 1) % this.videoSources.length;
             if(nextIndex === 0) {
                 this.routeLap += 1;
@@ -1078,16 +1037,18 @@ class Watch extends HTMLElement {
             this.prefetchNextVideos();
             this.updateRouteProgress();
             this.renderOverlayGraph();
-            this.queueNextVideoSwap();
+            this.ensureVideoSource(videoEl);
+            this.applyPlaybackState(videoEl, { shouldPlay: this.watchStatus === 'started', resetTime: true });
         }
     }
     ensureVideoSource(videoEl) {
         const entry = this.videoSources[this.videoIndex];
-        if (!entry) return;
-        this.currentMultiplier = entry.multiplier ?? 1;
-        if (videoEl.dataset.videoSrc !== entry.src) {
-            videoEl.dataset.videoSrc = entry.src;
-            videoEl.setAttribute('src', entry.src);
+        const src = this.routeVideoSrc ?? entry?.src;
+        if (!src) return;
+        this.currentMultiplier = entry?.multiplier ?? 1;
+        if (videoEl.dataset.videoSrc !== src) {
+            videoEl.dataset.videoSrc = src;
+            videoEl.setAttribute('src', src);
             videoEl.load();
         }
     }
@@ -1110,34 +1071,30 @@ class Watch extends HTMLElement {
     }
     updatePlaybackRate() {
         const rate = this.getPlaybackRate();
-        this.getActiveVideoEl() && (this.getActiveVideoEl().playbackRate = rate);
-        this.getStandbyVideoEl() && (this.getStandbyVideoEl().playbackRate = rate);
+        if(this.$routeVideoEl) {
+            this.$routeVideoEl.playbackRate = rate;
+        }
         this.updatePlaybackIndicator(rate);
     }
 
     startVideoPlayback() {
         const heroVideo = document.querySelector('#home-hero-video');
-        const videoEl = this.getActiveVideoEl();
+        const videoEl = this.$routeVideoEl;
         if (heroVideo && videoEl && this.videoSources.length > 0) {
             this.ensureVideoSource(videoEl);
             this.applyPlaybackState(videoEl, { shouldPlay: true, resetTime: true });
-            this.preloadUpcomingVideo();
         }
     }
 
     pauseVideoPlayback() {
-        this.$videoBuffers?.forEach(videoEl => videoEl.pause());
+        this.$routeVideoEl?.pause();
     }
 
     stopVideoPlayback() {
-        if(this.videoSwapTimer) {
-            clearTimeout(this.videoSwapTimer);
-            this.videoSwapTimer = null;
+        if(this.$routeVideoEl) {
+            this.$routeVideoEl.pause();
+            this.$routeVideoEl.currentTime = 0;
         }
-        this.$videoBuffers?.forEach(videoEl => {
-            videoEl.pause();
-            videoEl.currentTime = 0;
-        });
     }
 
     updatePlaybackIndicator(rate) {
@@ -1164,7 +1121,7 @@ class Watch extends HTMLElement {
     }
 
     async captureSnapshot() {
-        const videoEl = this.getActiveVideoEl();
+        const videoEl = this.$routeVideoEl;
         if(!videoEl || !videoEl.videoWidth) return null;
 
         const canvas = document.createElement('canvas');
@@ -1180,7 +1137,7 @@ class Watch extends HTMLElement {
     }
 
     async captureVideoFromCanvas(timestamp, durationMs) {
-        const videoEl = this.getActiveVideoEl();
+        const videoEl = this.$routeVideoEl;
         if(!videoEl || !videoEl.videoWidth) return;
 
         const canvas = document.createElement('canvas');
