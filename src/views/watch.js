@@ -347,6 +347,11 @@ class Watch extends HTMLElement {
             buffer.style.visibility = active ? 'visible' : 'hidden';
         });
     }
+    setVideoBufferVisibility(videoEl, visible) {
+        if(!videoEl) return;
+        videoEl.style.opacity = visible ? '1' : '0';
+        videoEl.style.visibility = visible ? 'visible' : 'hidden';
+    }
     preloadVideoIntoBuffer(videoEl, entry) {
         if(!videoEl || !entry?.src) return;
         if(videoEl.dataset.videoSrc === entry.src) return;
@@ -366,13 +371,28 @@ class Watch extends HTMLElement {
         const previousVideo = this.getActiveVideoEl();
         this.activeVideoBufferIndex = nextBufferIndex;
         this.currentMultiplier = this.videoSources[this.videoIndex]?.multiplier ?? 1;
-        this.showActiveVideoBuffer();
-        this.applyPlaybackState(nextVideoEl, { shouldPlay: this.watchStatus === 'started', resetTime: true });
-        if(previousVideo && previousVideo !== nextVideoEl) {
-            previousVideo.pause();
-            previousVideo.currentTime = 0;
+        const finalizeSwap = () => {
+            this.setVideoBufferVisibility(nextVideoEl, true);
+            if(previousVideo && previousVideo !== nextVideoEl) {
+                this.setVideoBufferVisibility(previousVideo, false);
+                previousVideo.pause();
+                previousVideo.currentTime = 0;
+            }
+            this.preloadUpcomingVideo();
+        };
+
+        this.setVideoBufferVisibility(nextVideoEl, false);
+        this.applyPlaybackState(nextVideoEl, { shouldPlay: false, resetTime: true });
+
+        if(this.watchStatus === 'started') {
+            const playPromise = nextVideoEl.play();
+            if(playPromise && typeof playPromise.then === 'function') {
+                playPromise.then(() => finalizeSwap()).catch(() => finalizeSwap());
+                return;
+            }
         }
-        this.preloadUpcomingVideo();
+
+        finalizeSwap();
     }
     queueNextVideoSwap() {
         const nextVideo = this.getStandbyVideoEl();
