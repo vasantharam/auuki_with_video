@@ -60,6 +60,7 @@ class Watch extends HTMLElement {
         this.videoIndex = 0;
         this.routeLap = 1;
         this.currentMultiplier = 1;
+        this.prefetchLinks = [];
         this.csvOptions = ['files'];
         this.selectedCsv = 'files';
         this.watchStatus = 'stopped';
@@ -880,6 +881,7 @@ class Watch extends HTMLElement {
                     this.videoIndex = 0;
                     this.routeLap = 1;
                     this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                    this.prefetchNextVideos();
                     this.updateRouteProgress();
                     this.renderOverlayGraph();
                     const heroVideo = document.querySelector('#home-hero-video');
@@ -899,6 +901,22 @@ class Watch extends HTMLElement {
             console.error('Error loading video manifest', e);
         }
     }
+    prefetchNextVideos(count = 4) {
+        this.prefetchLinks.forEach(l => l.remove());
+        this.prefetchLinks = [];
+        const total = this.videoSources.length;
+        if (total === 0) return;
+        for (let i = 1; i <= count; i++) {
+            const src = this.videoSources[(this.videoIndex + i) % total]?.src;
+            if (!src) continue;
+            const link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.as = 'video';
+            link.href = src;
+            document.head.appendChild(link);
+            this.prefetchLinks.push(link);
+        }
+    }
     onVideoEnded() {
         const heroVideo = document.querySelector('#home-hero-video');
         const videoEl = heroVideo?.querySelector('video');
@@ -908,6 +926,7 @@ class Watch extends HTMLElement {
                 this.routeLap += 1;
             }
             this.videoIndex = nextIndex;
+            this.prefetchNextVideos();
             this.updateRouteProgress();
             this.renderOverlayGraph();
             this.ensureVideoSource(videoEl);
