@@ -20,8 +20,10 @@ class Config {
 
         // Derive the app's base URL dynamically so Strava OAuth redirect_uri
         // works on any host (localhost, GitHub Pages subpath, custom domain).
+        // Keep the trailing slash so GitHub Pages serves index.html correctly
+        // when Strava appends ?state=...&code=... to the redirect URI.
         const pwaUri = window.location.origin +
-            window.location.pathname.replace(/\/?(?:index\.html)?$/, '');
+            window.location.pathname.replace(/index\.html$/, '');
 
         this.env = {
             PWA_URI: pwaUri,
