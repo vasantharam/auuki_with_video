@@ -1605,6 +1605,9 @@ class ModalError extends HTMLElement {
         if(msg === DialogMsg.noAuth) {
             return `Your session is over. You need to login again.`;
         }
+        if(msg === 'Configure and connect Strava from Settings.') {
+            return `<span class="motivation-message">${msg}</span>`;
+        }
         return `${msg ?? ''}`;
     }
 }
