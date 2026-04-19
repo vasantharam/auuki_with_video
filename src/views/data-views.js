@@ -1595,10 +1595,12 @@ class ModalError extends HTMLElement {
         this.abortController.abort();
     }
     onOpen(msg) {
+        this.$dialog.classList.toggle('motivation-dialog', msg === 'Configure and connect Strava from Settings.');
         this.$dialog.showModal();
         this.$message.innerHTML = this.message(msg);
     }
     onClose(result) {
+        this.$dialog.classList.remove('motivation-dialog');
         this.$dialog.close();
     }
     message(msg) {

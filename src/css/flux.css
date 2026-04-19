@@ -3889,6 +3889,21 @@ dialog {
     }
 }
 
+.dialog.error.motivation-dialog {
+    max-width: min(72rem, calc(100vw - 2rem));
+    padding: 2rem 2.5rem;
+
+    p {
+        margin: 0.4em auto 0.8em;
+        text-align: center;
+    }
+
+    button {
+        display: block;
+        font-size: 1.2em;
+    }
+}
+
 .motivation-message {
     display: block;
     font-size: 2.5em;
