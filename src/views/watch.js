@@ -839,7 +839,7 @@ class Watch extends HTMLElement {
     }
     resolveVideoAsset(path = '') {
         if(!path) return '';
-        return new URL(`../videos/${path}`, import.meta.url).toString();
+        return new URL(`videos/${path}`, document.baseURI).toString();
     }
     updateRouteProgress() {
         if(!this.$routeProgress) return;
