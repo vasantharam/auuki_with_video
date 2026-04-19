@@ -294,11 +294,13 @@ function LocalActivity(args = {}) {
 
         // printAppData(records, laps, events);
 
-        const activity_start_time = first(events)?.start_time ?? findFirstRecord(records).timestamp;
+        const activity_start_time = first(events)?.timestamp ?? findFirstRecord(records).timestamp;
         const time_created = last(laps)?.timestamp ?? findLastRecord(records)?.timestamp;
         const timestamp    = time_created;
-        const total_elapsed_time = calcTotalElapsedTime({records, laps, events});
-        const total_timer_time = calcTotalTimerTime({records, events});
+        // Use the authoritative timer counter when provided — avoids stale timestamps
+        // from a restored session inflating the elapsed time to 100s of hours.
+        const total_elapsed_time = args.elapsed ?? calcTotalElapsedTime({records, laps, events});
+        const total_timer_time = args.elapsed ?? calcTotalTimerTime({records, events});
         const stats = calcStats({records, total_timer_time});
 
         // structure: FITjs

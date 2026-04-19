@@ -596,12 +596,14 @@ class Activity extends Model {
         const laps = db.laps;
         const events = db.events;
         const ftp = db.ftp;
+        const elapsed = db.elapsed;
 
         return fit.localActivity.encode({
             records,
             laps,
             events,
             ftp,
+            elapsed,
         });
     }
     async restore() {

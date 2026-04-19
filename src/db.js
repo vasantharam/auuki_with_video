@@ -443,9 +443,54 @@ xf.reg('app:start', async function(_, db) {
     const sound = Sound({volume: db.volume});
     sound.start();
 
-    models.api.start();
-    // TODO: remove
-    // xf.dispatch(`ui:page-set`, 'workouts');
+    await models.api.start();
+
+    // --- Startup UI ---
+    // Priority: Strava reconnect > device pairing.
+    // "Start Here" (BLE) only shows when the user is on the home page.
+
+    const $startHere = document.getElementById('dialog--start-here');
+
+    // Track BLE connection state so the dialog knows when to show/hide.
+    let controllableConnected = false;
+    let hrmConnected = false;
+
+    const onControllableConnected    = () => { controllableConnected = true;  if ($startHere?.open) $startHere.close(); };
+    const onControllableDisconnected = () => { controllableConnected = false; };
+    const onHrmConnected             = () => { hrmConnected = true;  if ($startHere?.open) $startHere.close(); };
+    const onHrmDisconnected          = () => { hrmConnected = false; };
+
+    xf.sub('ble:controllable:connected',       onControllableConnected);
+    xf.sub('ble:controllable:disconnected',    onControllableDisconnected);
+    xf.sub('ble:heartRateMonitor:connected',   onHrmConnected);
+    xf.sub('ble:heartRateMonitor:disconnected',onHrmDisconnected);
+
+    if ($startHere) {
+        document.getElementById('start-here-dismiss')
+            ?.addEventListener('click', () => $startHere.close());
+
+        // Re-show whenever the user returns to the home page with no devices.
+        xf.sub('db:page', (page) => {
+            if (page === 'home' && !controllableConnected && !hrmConnected) {
+                if (!$startHere.open) $startHere.showModal();
+            }
+        });
+    }
+
+    // If Strava has saved credentials but couldn't auto-connect, go to Settings
+    // and animate the Strava section. Skip the BLE dialog for now — user sees
+    // it when they navigate back to Home.
+    if (!db.services.strava && models.api.strava.hasLocalClientCredentials()) {
+        xf.dispatch('ui:page-set', 'settings');
+        setTimeout(() => {
+            const $stravaSection = document.getElementById('strava-section');
+            $stravaSection?.scrollIntoView({behavior: 'smooth', block: 'start'});
+            $stravaSection?.classList.add('strava-attention');
+        }, 400);
+    } else if ($startHere && !controllableConnected && !hrmConnected) {
+        // Strava is fine (or unconfigured): open home page, show BLE dialog now.
+        $startHere.showModal();
+    }
 
     // TRAINER MOCK
     // trainerMock.init();

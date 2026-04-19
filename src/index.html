@@ -47,6 +47,25 @@
                     <button id="strava-guide-close" type="button" class="dialog--dismiss--btn">Close</button>
                 </div>
             </dialog>
+
+            <dialog id="dialog--start-here" class="dialog start-here-dialog">
+                <h3 class="start-here-title">Start Here</h3>
+                <p class="start-here-copy">Tap a device below to connect before you ride.</p>
+                <div class="start-here-switches">
+                    <connection-switch for="ble:controllable" class="connection-switch start-here-switch">
+                        <div class="connection-switch--indicator off"></div>
+                        <div class="connection-switch--label">Trainer / Power</div>
+                    </connection-switch>
+                    <connection-switch for="ble:heartRateMonitor" class="connection-switch start-here-switch">
+                        <div class="connection-switch--indicator off"></div>
+                        <div class="connection-switch--label">Heart Rate</div>
+                    </connection-switch>
+                </div>
+                <div class="start-here-actions">
+                    <button id="start-here-dismiss" type="button" class="dialog--dismiss--btn">Skip for now</button>
+                </div>
+            </dialog>
+
             <navigation-stack>
             <page-group prop="page">
                 <compatibility-check></compatibility-check>
@@ -761,7 +780,7 @@
                     </div>
 
                     <!-- strava -->
-                    <div class="list--sub-section app-connections">
+                    <div id="strava-section" class="list--sub-section app-connections">
                         <o-auth>
                             <div class="list--row--outer strava">
                                 <div class="list--row--inner app-connection logo">
