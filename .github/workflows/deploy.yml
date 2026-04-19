@@ -29,8 +29,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Preserve videos before Parcel cleans dist/
+        run: cp -r dist/videos /tmp/videos
+
       - name: Build
         run: npx parcel build src/index.html --public-url ./
+
+      - name: Restore videos
+        run: cp -r /tmp/videos dist/
 
       - uses: actions/upload-pages-artifact@v3
         with:
