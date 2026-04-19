@@ -445,13 +445,18 @@ xf.reg('app:start', async function(_, db) {
 
     await models.api.start();
 
-    // If Strava is not connected, start on Settings and focus the Strava setup.
+    // If Strava is not connected, keep the user on the current page,
+    // highlight Settings, and prompt them to configure/connect Strava.
     if (!db.services.strava) {
-        xf.dispatch('ui:page-set', 'settings');
         setTimeout(() => {
+            const $settingsTab = document.getElementById('settings-tab-btn');
             const $stravaSection = document.getElementById('strava-section');
-            $stravaSection?.scrollIntoView({behavior: 'smooth', block: 'start'});
-            $stravaSection?.classList.add('strava-attention');
+
+            $settingsTab?.classList.add('strava-attention');
+            if (db.page === 'settings') {
+                $stravaSection?.classList.add('strava-attention');
+            }
+            xf.dispatch('ui:modal:error:open', 'Configure and connect Strava from Settings.');
         }, 400);
     }
 
