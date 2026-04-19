@@ -469,6 +469,17 @@ xf.reg('app:start', async function(_, db) {
         document.getElementById('start-here-dismiss')
             ?.addEventListener('click', () => $startHere.close());
 
+        // Close the dialog as soon as the user taps a device switch so the
+        // app's modal is gone before Chrome opens the native BLE picker.
+        // Stacking showModal() + requestDevice() crashes Chrome.
+        const closeForBle = () => { if ($startHere.open) $startHere.close(); };
+        xf.sub('ui:ble:controllable:switch',    closeForBle);
+        xf.sub('ui:ble:heartRateMonitor:switch', closeForBle);
+
+        // Prevent Escape from closing the dialog (it fires cancel which closes
+        // it, then the BLE picker also captures Escape and the state diverges).
+        $startHere.addEventListener('cancel', (e) => e.preventDefault());
+
         // Re-show whenever the user returns to the home page with no devices.
         xf.sub('db:page', (page) => {
             if (page === 'home' && !controllableConnected && !hrmConnected) {
