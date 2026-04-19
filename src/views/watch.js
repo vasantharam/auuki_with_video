@@ -355,7 +355,7 @@ class Watch extends HTMLElement {
                 startSeconds: 0,
             };
             this.youtubePlayer = new YT.Player(this.$youtubeFeedPlayer, {
-                host: 'https://www.youtube-nocookie.com',
+                host: 'https://www.youtube.com',
                 videoId: initialFeed.videoId,
                 playerVars: {
                     autoplay: this.watchStatus === 'started' ? 1 : 0,
