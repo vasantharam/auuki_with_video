@@ -18,9 +18,14 @@ class Config {
         const localStravaClientId = this.stravaClientIdStorage.restore();
         const localStravaClientSecret = this.stravaClientSecretStorage.restore();
 
+        // Derive the app's base URL dynamically so Strava OAuth redirect_uri
+        // works on any host (localhost, GitHub Pages subpath, custom domain).
+        const pwaUri = window.location.origin +
+            window.location.pathname.replace(/\/?(?:index\.html)?$/, '');
+
         this.env = {
-            PWA_URI: "http://localhost:8080",
-            API_URI: "http://localhost:8080",
+            PWA_URI: pwaUri,
+            API_URI: pwaUri,
             STRAVA_CLIENT_ID: localStravaClientId || this.#defaultStravaClientId,
             STRAVA_CLIENT_SECRET: localStravaClientSecret || '',
             INTERVALS_CLIENT_ID: this.#defaultIntervalsClientId,
