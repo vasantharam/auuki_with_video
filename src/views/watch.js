@@ -60,6 +60,8 @@ class Watch extends HTMLElement {
         this.videoSources = [];
         this.videoIndex = 0;
         this.activeVideoBufferIndex = 0;
+        this.videoCrossfadeMs = 220;
+        this.videoSwapTimer = null;
         this.routeLap = 1;
         this.currentMultiplier = 1;
         this.prefetchLinks = [];
@@ -306,7 +308,8 @@ class Watch extends HTMLElement {
         videoEl.style.inset = '0';
         videoEl.style.opacity = index === this.activeVideoBufferIndex ? '1' : '0';
         videoEl.style.pointerEvents = 'none';
-        videoEl.style.transition = 'opacity 120ms linear';
+        videoEl.style.visibility = index === this.activeVideoBufferIndex ? 'visible' : 'hidden';
+        videoEl.style.transition = `opacity ${this.videoCrossfadeMs}ms ease`;
         videoEl.style.zIndex = '0';
         videoEl.addEventListener('ended', this.onVideoEnded, this.signal);
         videoEl.addEventListener('loadedmetadata', this.onVideoLoadedMetadata, this.signal);
@@ -371,28 +374,40 @@ class Watch extends HTMLElement {
         const previousVideo = this.getActiveVideoEl();
         this.activeVideoBufferIndex = nextBufferIndex;
         this.currentMultiplier = this.videoSources[this.videoIndex]?.multiplier ?? 1;
-        const finalizeSwap = () => {
-            this.setVideoBufferVisibility(nextVideoEl, true);
-            if(previousVideo && previousVideo !== nextVideoEl) {
-                this.setVideoBufferVisibility(previousVideo, false);
-                previousVideo.pause();
-                previousVideo.currentTime = 0;
-            }
-            this.preloadUpcomingVideo();
-        };
+        if(this.videoSwapTimer) {
+            clearTimeout(this.videoSwapTimer);
+            this.videoSwapTimer = null;
+        }
 
         this.setVideoBufferVisibility(nextVideoEl, false);
         this.applyPlaybackState(nextVideoEl, { shouldPlay: false, resetTime: true });
 
+        const finalizeSwap = () => {
+            if(previousVideo && previousVideo !== nextVideoEl) {
+                previousVideo.pause();
+                previousVideo.currentTime = 0;
+                this.setVideoBufferVisibility(previousVideo, false);
+            }
+            this.videoSwapTimer = null;
+            this.preloadUpcomingVideo();
+        };
+
+        if(previousVideo && previousVideo !== nextVideoEl) {
+            this.setVideoBufferVisibility(previousVideo, true);
+        }
+        this.setVideoBufferVisibility(nextVideoEl, true);
+
         if(this.watchStatus === 'started') {
             const playPromise = nextVideoEl.play();
             if(playPromise && typeof playPromise.then === 'function') {
-                playPromise.then(() => finalizeSwap()).catch(() => finalizeSwap());
+                playPromise.then(() => {
+                    this.videoSwapTimer = window.setTimeout(finalizeSwap, this.videoCrossfadeMs);
+                }).catch(() => finalizeSwap());
                 return;
             }
         }
 
-        finalizeSwap();
+        this.videoSwapTimer = window.setTimeout(finalizeSwap, this.videoCrossfadeMs);
     }
     queueNextVideoSwap() {
         const nextVideo = this.getStandbyVideoEl();
@@ -1115,6 +1130,10 @@ class Watch extends HTMLElement {
     }
 
     stopVideoPlayback() {
+        if(this.videoSwapTimer) {
+            clearTimeout(this.videoSwapTimer);
+            this.videoSwapTimer = null;
+        }
         this.$videoBuffers?.forEach(videoEl => {
             videoEl.pause();
             videoEl.currentTime = 0;
