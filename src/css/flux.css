@@ -3911,52 +3911,6 @@ dialog {
     flex-wrap: wrap;
 }
 
-/* Start Here dialog */
-.start-here-dialog {
-    max-width: 22rem;
-}
-
-.start-here-title {
-    margin: 0 0 0.5rem;
-    font-size: 1.1em;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.start-here-copy {
-    margin: 0 0 1.2rem;
-    font-size: 0.95em;
-    line-height: 1.5;
-    color: var(--foreground-color-inactive);
-}
-
-.start-here-switches {
-    display: flex;
-    flex-direction: column;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    margin-bottom: 1.2rem;
-    overflow: hidden;
-}
-
-.start-here-switch {
-    font-size: 1.05em;
-    padding: 0.5rem 1rem;
-    border-bottom: 1px solid var(--border-color);
-
-    &:last-child {
-        border-bottom: none;
-    }
-
-    &:hover {
-        background-color: var(--white-opacity-01);
-    }
-}
-
-.start-here-actions {
-    display: flex;
-    justify-content: flex-end;
-}
 
 /* Strava attention pulse — animated when Strava needs reconnect */
 @keyframes strava-attention {
