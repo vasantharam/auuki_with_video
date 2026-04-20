@@ -29,6 +29,11 @@ class Watch extends HTMLElement {
         this.onYoutubePlayerStateChange = this.onYoutubePlayerStateChange.bind(this);
         this.onVideoLoadedMetadata = this.onVideoLoadedMetadata.bind(this);
         this.onVideoTimeUpdate = this.onVideoTimeUpdate.bind(this);
+        this.onRouteVideoLoadStart = this.onRouteVideoLoadStart.bind(this);
+        this.onRouteVideoProgress = this.onRouteVideoProgress.bind(this);
+        this.onRouteVideoCanPlay = this.onRouteVideoCanPlay.bind(this);
+        this.onRouteVideoWaiting = this.onRouteVideoWaiting.bind(this);
+        this.onRouteVideoError = this.onRouteVideoError.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -64,6 +69,7 @@ class Watch extends HTMLElement {
         this.routeSegmentEnds = [];
         this.combinedRouteManifest = null;
         this.routeVideoLoadToken = 0;
+        this.routeVideoLoading = false;
         this.routeLap = 1;
         this.currentMultiplier = 1;
         this.prefetchLinks = [];
@@ -97,6 +103,10 @@ class Watch extends HTMLElement {
         this.$routeProgressFill = document.querySelector('#video-route-progress-fill');
         this.$routeProgressMarker = document.querySelector('#video-route-progress-marker');
         this.$videoStage = document.querySelector('.video-stage');
+        this.$routeVideoLoading = document.querySelector('#route-video-loading');
+        this.$routeVideoLoadingText = document.querySelector('#route-video-loading-text');
+        this.$routeVideoLoadingMeta = document.querySelector('#route-video-loading-meta');
+        this.$routeVideoLoadingBar = document.querySelector('#route-video-loading-bar');
         this.youtubePlayer = null;
         this.youtubePlayerReady = false;
         this.pendingYoutubeFeed = null;
@@ -163,6 +173,13 @@ class Watch extends HTMLElement {
             videoEl.dataset.videoSrc = '';
             videoEl.preload = 'auto';
             videoEl.addEventListener('ended', this.onVideoEnded, this.signal);
+            videoEl.addEventListener('loadstart', this.onRouteVideoLoadStart, this.signal);
+            videoEl.addEventListener('progress', this.onRouteVideoProgress, this.signal);
+            videoEl.addEventListener('canplay', this.onRouteVideoCanPlay, this.signal);
+            videoEl.addEventListener('playing', this.onRouteVideoCanPlay, this.signal);
+            videoEl.addEventListener('waiting', this.onRouteVideoWaiting, this.signal);
+            videoEl.addEventListener('stalled', this.onRouteVideoWaiting, this.signal);
+            videoEl.addEventListener('error', this.onRouteVideoError, this.signal);
             videoEl.addEventListener('loadedmetadata', this.onVideoLoadedMetadata, this.signal);
             videoEl.addEventListener('timeupdate', this.onVideoTimeUpdate, this.signal);
         }
@@ -190,6 +207,7 @@ class Watch extends HTMLElement {
         this.updateResponsiveLayout();
         this.updateOverlayClearance();
         this.updateMotivationPanel();
+        this.setRouteVideoLoadingState(false);
     }
     disconnectedCallback() {
         this.youtubePlayer?.destroy?.();
@@ -295,8 +313,42 @@ class Watch extends HTMLElement {
     };
     onVideoLoadedMetadata(event) {
         if(event.currentTarget === this.$routeVideoEl) {
+            this.updateRouteVideoLoadingProgress(event.currentTarget);
             this.updateResponsiveLayout();
         }
+    }
+    onRouteVideoLoadStart(event) {
+        if(event.currentTarget !== this.$routeVideoEl) return;
+        this.setRouteVideoLoadingState(true, {
+            text: 'Loading...',
+            meta: 'Preparing route video',
+            progress: null,
+        });
+    }
+    onRouteVideoProgress(event) {
+        if(event.currentTarget !== this.$routeVideoEl) return;
+        this.updateRouteVideoLoadingProgress(event.currentTarget);
+    }
+    onRouteVideoCanPlay(event) {
+        if(event.currentTarget !== this.$routeVideoEl) return;
+        this.setRouteVideoLoadingState(false);
+    }
+    onRouteVideoWaiting(event) {
+        if(event.currentTarget !== this.$routeVideoEl || !this.$routeVideoEl?.dataset.videoSrc) return;
+        const progress = this.getRouteVideoBufferedProgress(event.currentTarget);
+        this.setRouteVideoLoadingState(true, {
+            text: 'Loading...',
+            meta: progress === null ? 'Buffering route video' : `Buffering ${this.formatRouteVideoProgress(progress)}`,
+            progress,
+        });
+    }
+    onRouteVideoError(event) {
+        if(event.currentTarget !== this.$routeVideoEl) return;
+        this.setRouteVideoLoadingState(true, {
+            text: 'Loading...',
+            meta: 'Route video load delayed',
+            progress: null,
+        });
     }
     onVideoTimeUpdate(event) {
         if(!this.routeVideoSrc || this.routeSegmentEnds.length === 0) return;
@@ -329,6 +381,54 @@ class Watch extends HTMLElement {
             return;
         }
         videoEl.pause();
+    }
+    getRouteVideoBufferedProgress(videoEl) {
+        if(!videoEl?.buffered?.length) return null;
+        const duration = videoEl.duration;
+        if(!Number.isFinite(duration) || duration <= 0) return null;
+        try {
+            const bufferedEnd = videoEl.buffered.end(videoEl.buffered.length - 1);
+            const progress = bufferedEnd / duration;
+            if(!Number.isFinite(progress)) return null;
+            return Math.max(0, Math.min(1, progress));
+        } catch(err) {
+            return null;
+        }
+    }
+    formatRouteVideoProgress(progress) {
+        const percentage = Math.max(0, Math.min(100, Math.round(progress * 100)));
+        return `${percentage}%`;
+    }
+    updateRouteVideoLoadingProgress(videoEl = this.$routeVideoEl) {
+        if(!videoEl?.dataset.videoSrc) return;
+        const progress = this.getRouteVideoBufferedProgress(videoEl);
+        if(videoEl.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            this.setRouteVideoLoadingState(false);
+            return;
+        }
+        this.setRouteVideoLoadingState(true, {
+            text: 'Loading...',
+            meta: progress === null ? 'Preparing route video' : `Loading ${this.formatRouteVideoProgress(progress)}`,
+            progress,
+        });
+    }
+    setRouteVideoLoadingState(isLoading, { text = 'Loading...', meta = 'Preparing route video', progress = null } = {}) {
+        if(!this.$routeVideoLoading) return;
+        this.routeVideoLoading = isLoading;
+        this.$routeVideoLoading.classList.toggle('active', isLoading);
+        const determinate = typeof progress === 'number' && Number.isFinite(progress);
+        this.$routeVideoLoading.classList.toggle('indeterminate', isLoading && !determinate);
+        this.$routeVideoLoading.setAttribute('aria-hidden', isLoading ? 'false' : 'true');
+        if(this.$routeVideoLoadingText) {
+            this.$routeVideoLoadingText.textContent = text;
+        }
+        if(this.$routeVideoLoadingMeta) {
+            this.$routeVideoLoadingMeta.textContent = meta;
+        }
+        if(this.$routeVideoLoadingBar) {
+            const width = determinate ? `${Math.max(4, Math.round(progress * 100))}%` : '18%';
+            this.$routeVideoLoadingBar.style.setProperty('--route-video-progress', width);
+        }
     }
     waitForVideoReady(videoEl, expectedSrc, timeoutMs = 12000) {
         if(!videoEl || !expectedSrc || videoEl.dataset.videoSrc !== expectedSrc) {
@@ -365,6 +465,11 @@ class Watch extends HTMLElement {
         const expectedSrc = videoEl?.dataset.videoSrc;
         if(!videoEl || !expectedSrc) return;
         const loadToken = this.routeVideoLoadToken;
+        this.setRouteVideoLoadingState(true, {
+            text: 'Loading...',
+            meta: 'Preparing route video',
+            progress: this.getRouteVideoBufferedProgress(videoEl),
+        });
         videoEl.load();
 
         let ready = await this.waitForVideoReady(videoEl, expectedSrc, 4000);
@@ -391,17 +496,32 @@ class Watch extends HTMLElement {
                 // Ignore seek failures before metadata is fully available.
             }
         }
+        this.setRouteVideoLoadingState(!ready, {
+            text: 'Loading...',
+            meta: ready ? 'Route video ready' : 'Preparing route video',
+            progress: ready ? 1 : this.getRouteVideoBufferedProgress(videoEl),
+        });
     }
     async startRouteVideo(videoEl, resetTime = true) {
         if(!videoEl) return;
         const expectedSrc = videoEl.dataset.videoSrc;
         if(!expectedSrc) return;
         const loadToken = this.routeVideoLoadToken;
+        this.setRouteVideoLoadingState(true, {
+            text: 'Loading...',
+            meta: 'Preparing route video',
+            progress: this.getRouteVideoBufferedProgress(videoEl),
+        });
         videoEl.load();
-        await this.waitForVideoReady(videoEl, expectedSrc);
+        const ready = await this.waitForVideoReady(videoEl, expectedSrc);
         if(loadToken !== this.routeVideoLoadToken || videoEl.dataset.videoSrc !== expectedSrc || this.watchStatus !== 'started') {
             return;
         }
+        this.setRouteVideoLoadingState(!ready, {
+            text: 'Loading...',
+            meta: ready ? 'Route video ready' : 'Preparing route video',
+            progress: ready ? 1 : this.getRouteVideoBufferedProgress(videoEl),
+        });
         this.applyPlaybackState(videoEl, { shouldPlay: true, resetTime });
     }
     setupYoutubeFeed() {
@@ -1132,6 +1252,11 @@ class Watch extends HTMLElement {
             this.routeVideoLoadToken += 1;
             videoEl.dataset.videoSrc = src;
             videoEl.setAttribute('src', src);
+            this.setRouteVideoLoadingState(true, {
+                text: 'Loading...',
+                meta: 'Preparing route video',
+                progress: null,
+            });
         }
     }
     getPlaybackRate() {
@@ -1177,6 +1302,7 @@ class Watch extends HTMLElement {
             this.$routeVideoEl.pause();
             this.$routeVideoEl.currentTime = 0;
         }
+        this.setRouteVideoLoadingState(false);
     }
 
     updatePlaybackIndicator(rate) {
