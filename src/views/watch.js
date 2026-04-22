@@ -72,6 +72,7 @@ class Watch extends HTMLElement {
         this.routeVideoLoading = false;
         this.routeLap = 1;
         this.currentMultiplier = 1;
+        this.currentRouteAspectRatio = null;
         this.prefetchLinks = [];
         this.csvOptions = ['files'];
         this.selectedCsv = 'files';
@@ -203,6 +204,7 @@ class Watch extends HTMLElement {
         this.renderCsvSelector();
         this.loadCsvOptions();
         this.updatePlaybackIndicator(this.getPlaybackRate());
+        this.syncRouteLabels();
         this.updateRouteProgress();
         this.updateResponsiveLayout();
         this.updateOverlayClearance();
@@ -313,6 +315,7 @@ class Watch extends HTMLElement {
     };
     onVideoLoadedMetadata(event) {
         if(event.currentTarget === this.$routeVideoEl) {
+            this.syncRouteAspectRatioFromVideo(event.currentTarget);
             this.updateRouteVideoLoadingProgress(event.currentTarget);
             this.updateResponsiveLayout();
         }
@@ -995,9 +998,7 @@ class Watch extends HTMLElement {
             `;
         }).join('');
         const currentRoute = this.formatRouteName(selected || 'Route') || 'Route';
-        if(this.$heroRouteLabel) {
-            this.$heroRouteLabel.textContent = currentRoute;
-        }
+        this.syncRouteLabels(currentRoute);
         if(this.$motivationText) {
             this.$motivationText.textContent = this.getCurrentMotivationLine();
         }
@@ -1017,6 +1018,7 @@ class Watch extends HTMLElement {
                     this.selectedCsv = value;
                     this.videoIndex = 0;
                     this.routeLap = 1;
+                    this.syncRouteLabels();
                     this.updateRouteProgress();
                     this.renderOverlayGraph();
                     this.loadVideoManifest(this.selectedCsv);
@@ -1033,6 +1035,36 @@ class Watch extends HTMLElement {
             .replace(/\s+/g, ' ')
             .trim();
     }
+    syncRouteLabels(routeName = this.formatRouteName(this.selectedCsv || 'Route') || 'Route') {
+        if(this.$heroRouteLabel) {
+            this.$heroRouteLabel.textContent = routeName;
+        }
+        const currentLabel = this.$csvSelector?.querySelector('.video-csv-selector-current');
+        if(currentLabel) {
+            currentLabel.textContent = routeName;
+        }
+        if(this.$routeProgressLabel) {
+            this.$routeProgressLabel.textContent = routeName;
+        }
+    }
+    setHeroAspectRatio(width, height) {
+        const safeWidth = Number(width);
+        const safeHeight = Number(height);
+        if(!Number.isFinite(safeWidth) || !Number.isFinite(safeHeight) || safeWidth <= 0 || safeHeight <= 0) {
+            this.currentRouteAspectRatio = null;
+            this.$heroVideo?.style.removeProperty('aspect-ratio');
+            return;
+        }
+        this.currentRouteAspectRatio = safeWidth / safeHeight;
+        this.$heroVideo?.style.setProperty('aspect-ratio', `${safeWidth} / ${safeHeight}`);
+    }
+    syncRouteAspectRatioFromVideo(videoEl = this.$routeVideoEl) {
+        const width = videoEl?.videoWidth;
+        const height = videoEl?.videoHeight;
+        if(width > 0 && height > 0) {
+            this.setHeroAspectRatio(width, height);
+        }
+    }
     resolveVideoAsset(path = '') {
         if(!path) return '';
         return new URL(`videos/${path}`, document.baseURI).toString();
@@ -1044,9 +1076,7 @@ class Watch extends HTMLElement {
         const currentIndex = total > 0 ? this.videoIndex % total : 0;
         const progress = total > 0 ? currentIndex / total : 0;
 
-        if(this.$routeProgressLabel) {
-            this.$routeProgressLabel.textContent = this.formatRouteName(this.selectedCsv || 'Route') || 'Route';
-        }
+        this.syncRouteLabels();
         if(this.$routeProgressCount) {
             this.$routeProgressCount.textContent = total > 0 ? `${currentIndex + 1} / ${total}` : '0 / 0';
         }
@@ -1115,6 +1145,7 @@ class Watch extends HTMLElement {
                     src: this.resolveVideoAsset(segment.src),
                 }));
                 this.routeVideoSrc = combinedEntry.src ? this.resolveVideoAsset(combinedEntry.src) : null;
+                this.setHeroAspectRatio(combinedEntry.width, combinedEntry.height);
                 this.routeSegmentEnds = [];
                 let elapsed = 0;
                 this.videoSources.forEach(segment => {
@@ -1159,6 +1190,7 @@ class Watch extends HTMLElement {
                     this.routeVideoSrc = null;
                     this.routeSegmentEnds = [];
                     this.videoSources = entries;
+                    this.setHeroAspectRatio(null, null);
                     this.videoIndex = 0;
                     this.routeLap = 1;
                     this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
@@ -1413,9 +1445,9 @@ class Watch extends HTMLElement {
         const midY = y + barH * 0.5;
 
         const cols = [
-            { label: 'POWER',   value: `${this.power1s ?? '--'}w` },
-            { label: 'HR',      value: `${this.heartRate ?? '--'}` },
-            { label: 'CADENCE', value: `${this.cadence ?? '--'}` },
+            { label: 'POWER',   value: `${this.formatHudInteger(this.power1s, { suffix: 'w' })}` },
+            { label: 'HR',      value: this.formatHudInteger(this.heartRate) },
+            { label: 'CADENCE', value: this.formatHudInteger(this.cadence) },
             { label: 'TIME',    value: this.formatSeconds(this.elapsed ?? 0) },
         ];
 
@@ -1441,6 +1473,11 @@ class Watch extends HTMLElement {
         const sec = s % 60;
         if(h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
         return `${m}:${String(sec).padStart(2,'0')}`;
+    }
+    formatHudInteger(value, { suffix = '' } = {}) {
+        const numeric = Number(value);
+        if(!Number.isFinite(numeric)) return '--';
+        return `${Math.round(numeric)}${suffix}`;
     }
 
     downloadBlob(blob, filename) {
