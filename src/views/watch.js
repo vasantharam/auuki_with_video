@@ -1003,6 +1003,9 @@ class Watch extends HTMLElement {
             this.$motivationText.textContent = this.getCurrentMotivationLine();
         }
         this.$csvSelector.innerHTML = `
+            <button class="video-csv-selector-trigger" type="button" aria-label="Show AI routes">
+                <span class="video-csv-selector-trigger-icon" aria-hidden="true">Routes</span>
+            </button>
             <div class="video-csv-selector-header">
                 <h4>AI Routes</h4>
                 <span class="video-csv-selector-current">${currentRoute}</span>
