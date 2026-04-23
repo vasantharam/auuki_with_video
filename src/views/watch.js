@@ -877,29 +877,18 @@ class Watch extends HTMLElement {
         return lines[index];
     }
     updateMotivationPanel() {
-        if(!this.$motivationPanel || !this.$motivationText || !this.$csvSelector || !this.$videoOverlay) return;
+        if(!this.$motivationPanel || !this.$motivationText || !this.$videoOverlay) return;
 
         if(window.innerWidth < 1100) {
             this.$motivationPanel.hidden = true;
             return;
         }
 
-        const selectorRect = this.$csvSelector.getBoundingClientRect();
         const overlayRect = this.$videoOverlay.getBoundingClientRect();
-        const gap = selectorRect.top - overlayRect.bottom;
-        const minGap = 120;
-
-        if(gap < minGap) {
-            this.$motivationPanel.hidden = true;
-            this.$motivationPanel.style.removeProperty('top');
-            this.$motivationPanel.style.removeProperty('width');
-            this.$motivationPanel.style.removeProperty('max-height');
-            return;
-        }
-
         const top = Math.round(overlayRect.bottom + 12);
-        const width = Math.round(Math.min(window.innerWidth - 40, Math.max(selectorRect.width + 160, 420)));
-        const maxHeight = Math.max(88, Math.round(gap - 24));
+        const width = Math.round(Math.min(window.innerWidth - 40, 420));
+        const maxHeight = Math.round(window.innerHeight - overlayRect.bottom - 20);
+
         this.$motivationText.textContent = this.getCurrentMotivationLine();
         this.$motivationPanel.hidden = false;
         this.$motivationPanel.style.top = `${top}px`;
