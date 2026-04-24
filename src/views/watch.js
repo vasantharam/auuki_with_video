@@ -34,6 +34,7 @@ class Watch extends HTMLElement {
         this.onRouteVideoCanPlay = this.onRouteVideoCanPlay.bind(this);
         this.onRouteVideoWaiting = this.onRouteVideoWaiting.bind(this);
         this.onRouteVideoError = this.onRouteVideoError.bind(this);
+        this.onRouteExpandToggle = this.onRouteExpandToggle.bind(this);
     }
     connectedCallback() {
         const self = this;
@@ -60,6 +61,7 @@ class Watch extends HTMLElement {
         this.intervalDuration = 0;
         this.intervalIndex = 0;
         this.workoutIntervals = [];
+        this.workoutStatus = 'stopped';
         this.powerHistory = [];
         this.heartHistory = [];
         this.maxHistoryPoints = 120;
@@ -72,7 +74,13 @@ class Watch extends HTMLElement {
         this.routeVideoLoading = false;
         this.routeLap = 1;
         this.currentMultiplier = 1;
+        this.routeSingleColumnBreakpoint = 1100;
+        this.layoutBaselineWidth = 1200;
+        this.layoutBaselineHeight = 1400;
         this.currentRouteAspectRatio = null;
+        this.isRouteExpanded = false;
+        this.workoutPlanSegmentsMarkup = null;
+        this.$workoutPlanMarker = null;
         this.prefetchLinks = [];
         this.csvOptions = ['files'];
         this.selectedCsv = 'files';
@@ -89,6 +97,7 @@ class Watch extends HTMLElement {
         this.$youtubeFeedHeader = document.querySelector('.youtube-feed-header');
         this.$youtubeFeedLabel = document.querySelector('#youtube-feed-label');
         this.$heroRouteLabel = document.querySelector('#home-hero-route-label');
+        this.$routeExpandToggle = document.querySelector('#route-expand-toggle');
         this.$motivationPanel = document.querySelector('#video-motivation-panel');
         this.$motivationText = document.querySelector('#video-motivation-text');
         this.$routeLapLabel = document.querySelector('#video-route-lap-label');
@@ -103,6 +112,7 @@ class Watch extends HTMLElement {
         this.$routeProgressTrack = document.querySelector('#video-route-progress-track');
         this.$routeProgressFill = document.querySelector('#video-route-progress-fill');
         this.$routeProgressMarker = document.querySelector('#video-route-progress-marker');
+        this.$videoTarget = document.querySelector('.targets--cont.video-target');
         this.$videoStage = document.querySelector('.video-stage');
         this.$routeVideoLoading = document.querySelector('#route-video-loading');
         this.$routeVideoLoadingText = document.querySelector('#route-video-loading-text');
@@ -114,16 +124,16 @@ class Watch extends HTMLElement {
         this.isAdvancingYoutubeFeed = false;
         this.youtubeFeedHistoryKey = 'auuki.youtube-feed-history-v2';
         this.motivationLines = [
-            'Steady now. Your legs are writing checks your future self will happily cash.',
-            'This interval is just a strongly worded suggestion from your quads.',
-            'Keep turning the pedals. Gravity is already gossiping about you.',
-            'Your trainer thinks this is serious. You can still make it stylish.',
-            'Heart rate up, shoulders down, ego calibrated. That is premium riding.',
-            'You are not stuck indoors. You are conducting a very expensive weather protest.',
-            'Every minute here makes the next climb slightly less dramatic.',
-            'Smooth power. No heroics. Save the cinema for the route videos.',
-            'If your legs complain, remind them they were hired for this.',
-            'You are deep in the zone where excuses lose signal.'
+            'Steady watts, quiet shoulders, clean rhythm.',
+            'Small gears, big patience, tidy cadence.',
+            'This interval has opinions. The pedals get the final vote.',
+            'Smooth power beats panic power every time.',
+            'Breathe in, spin out, keep the plot moving.',
+            'Legs may file complaints; cadence keeps the meeting short.',
+            'No fireworks needed. Just one clean minute after another.',
+            'If the room feels tiny, the engine still gets bigger.',
+            'A calm tempo makes hard work look suspiciously professional.',
+            'The road on screen can wander. The power line stays neat.'
         ];
         this.youtubeChannels = [
             {
@@ -149,6 +159,7 @@ class Watch extends HTMLElement {
         this.dom.record?.addEventListener('pointerup', this.onRecord.bind(this), this.signal);
         // this.dom.workout.addEventListener('pointerup', this.onWorkoutStart);
         this.dom.save.addEventListener(`pointerup`, this.onSave, this.signal);
+        this.$routeExpandToggle?.addEventListener('pointerup', this.onRouteExpandToggle, this.signal);
 
         this.renderInit(this.dom);
         this.setupYoutubeFeed();
@@ -206,6 +217,7 @@ class Watch extends HTMLElement {
         this.updatePlaybackIndicator(this.getPlaybackRate());
         this.syncRouteLabels();
         this.updateRouteProgress();
+        this.syncRouteExpandedState();
         this.updateResponsiveLayout();
         this.updateOverlayClearance();
         this.updateMotivationPanel();
@@ -275,8 +287,10 @@ class Watch extends HTMLElement {
         this.syncYoutubeFeedPlayback();
     }
     onWorkoutStatus(status) {
+        this.workoutStatus = status;
         if(status === 'started') { this.renderWorkoutStarted(this.dom); }
         if(status === 'done')    {  }
+        this.renderOverlayGraph();
     }
     renderInit(dom) {
         dom.pause.style.display = 'none';
@@ -752,31 +766,62 @@ class Watch extends HTMLElement {
         }
         this.pauseYoutubeFeed();
     }
+    onRouteExpandToggle(event) {
+        event?.preventDefault?.();
+        this.isRouteExpanded = !this.isRouteExpanded;
+        this.syncRouteExpandedState();
+        this.updateResponsiveLayout();
+        this.updateOverlayClearance();
+        this.updateMotivationPanel();
+    }
+    syncRouteExpandedState() {
+        this.$videoTarget?.classList.toggle('route-expanded', this.isRouteExpanded);
+        if(!this.$routeExpandToggle) return;
+        this.$routeExpandToggle.setAttribute('aria-pressed', this.isRouteExpanded ? 'true' : 'false');
+        this.$routeExpandToggle.setAttribute(
+            'aria-label',
+            this.isRouteExpanded ? 'Compact AI route video' : 'Expand AI route video',
+        );
+        this.$routeExpandToggle.textContent = this.isRouteExpanded ? 'Compact' : 'Expand';
+    }
+    clearManagedVideoLayout() {
+        this.$videoStage.style.removeProperty('display');
+        this.$videoStage.style.removeProperty('gap');
+        this.$videoStage.style.removeProperty('align-items');
+        this.$videoStage.style.removeProperty('justify-content');
+        this.$videoStage.style.removeProperty('grid-template-columns');
+        this.$youtubeFeed.style.removeProperty('width');
+        this.$youtubeFeed.style.removeProperty('min-width');
+        this.$youtubeFeed.style.removeProperty('max-width');
+        this.$youtubeFeed.style.removeProperty('flex');
+        this.$youtubeFeed.style.removeProperty('height');
+        this.$youtubeFeedPlayer?.style.removeProperty('height');
+        this.$heroVideo.style.removeProperty('width');
+        this.$heroVideo.style.removeProperty('max-width');
+        this.$heroVideo.style.removeProperty('min-width');
+        this.$heroVideo.style.removeProperty('flex');
+    }
+    isLayoutBaselineLocked() {
+        return window.innerWidth < this.layoutBaselineWidth || window.innerHeight < this.layoutBaselineHeight;
+    }
     updateResponsiveLayout() {
         if(!this.$videoStage || !this.$youtubeFeed || !this.$heroVideo) return;
 
-        if(window.innerWidth < 1100) {
-            this.$videoStage.style.removeProperty('display');
-            this.$videoStage.style.removeProperty('gap');
-            this.$videoStage.style.removeProperty('align-items');
-            this.$videoStage.style.removeProperty('grid-template-columns');
-            this.$youtubeFeed.style.removeProperty('width');
-            this.$youtubeFeed.style.removeProperty('min-width');
-            this.$youtubeFeed.style.removeProperty('max-width');
-            this.$youtubeFeed.style.removeProperty('flex');
-            this.$youtubeFeed.style.removeProperty('height');
-            this.$youtubeFeedPlayer?.style.removeProperty('height');
-            this.$heroVideo.style.removeProperty('width');
-            this.$heroVideo.style.removeProperty('max-width');
-            this.$heroVideo.style.removeProperty('min-width');
-            this.$heroVideo.style.removeProperty('flex');
+        if(this.isRouteExpanded) {
+            this.clearManagedVideoLayout();
             return;
         }
 
-        const stageWidth = this.$videoStage.clientWidth;
+        const baselineLocked = this.isLayoutBaselineLocked();
+        const stageWidth = baselineLocked
+            ? this.layoutBaselineWidth - 32
+            : this.$videoStage.clientWidth;
         const heroVideoEl = this.$heroVideo?.querySelector('video');
         const gap = 13; // 0.8rem at the app's base font sizing
-        const scenicShare = window.innerWidth >= 2100 ? 0.54 : window.innerWidth >= 1500 ? 0.5 : 0.47;
+        const layoutWidth = baselineLocked
+            ? this.layoutBaselineWidth
+            : window.innerWidth;
+        const scenicShare = layoutWidth >= 2100 ? 0.54 : layoutWidth >= 1500 ? 0.5 : 0.47;
         const minMainWidth = 360;
         const minScenicWidth = 520;
         const sourceMaxWidth = heroVideoEl?.videoWidth > 0
@@ -815,17 +860,10 @@ class Watch extends HTMLElement {
     }
     updateOverlayClearance() {
         if(!this.$heroVideo || !this.$fixedBottom || !this.$videoOverlay) return;
-        const heroRect = this.$heroVideo.getBoundingClientRect();
-        const fixedRect = this.$fixedBottom.getBoundingClientRect();
-        const overlap = Math.max(0, heroRect.bottom - fixedRect.top);
-        const clearance = overlap > 0 ? overlap + 8 : 0;
-        const roomBelowHero = Math.max(0, fixedRect.top - heroRect.bottom);
-        const overlayHeight = this.$videoOverlay.getBoundingClientRect().height;
-        const canDetach = roomBelowHero >= overlayHeight + 24;
 
-        this.$heroVideo.classList.toggle('hud-detached', canDetach);
-        this.$heroVideo.style.setProperty('--home-overlay-detached-height', `${Math.ceil(overlayHeight)}px`);
-        this.$heroVideo.style.setProperty('--home-overlay-dynamic-clearance', `${Math.ceil(clearance)}px`);
+        this.$heroVideo.classList.remove('hud-detached');
+        this.$heroVideo.style.setProperty('--home-overlay-detached-height', '0px');
+        this.$heroVideo.style.setProperty('--home-overlay-dynamic-clearance', '0px');
     }
     onElapsed(elapsed) {
         this.elapsed = elapsed;
@@ -859,7 +897,7 @@ class Watch extends HTMLElement {
             this.$intervalLabel.textContent = intervalName;
         }
         if(this.$workoutPlan) {
-            this.$workoutPlan.innerHTML = this.renderWorkoutPlan();
+            this.updateWorkoutPlan();
         }
         if(this.$powerGraph) {
             this.$powerGraph.setAttribute('points', this.toSparklinePoints(this.powerHistory, 500));
@@ -879,15 +917,10 @@ class Watch extends HTMLElement {
     updateMotivationPanel() {
         if(!this.$motivationPanel || !this.$motivationText || !this.$videoOverlay) return;
 
-        if(window.innerWidth < 1100) {
-            this.$motivationPanel.hidden = true;
-            return;
-        }
-
         const overlayRect = this.$videoOverlay.getBoundingClientRect();
         const top = Math.round(overlayRect.bottom + 12);
-        const width = Math.round(Math.min(window.innerWidth - 40, 420));
-        const maxHeight = Math.round(window.innerHeight - overlayRect.bottom - 20);
+        const width = 720;
+        const maxHeight = Math.max(120, Math.round(window.innerHeight - overlayRect.bottom - 20));
 
         this.$motivationText.textContent = this.getCurrentMotivationLine();
         this.$motivationPanel.hidden = false;
@@ -927,29 +960,58 @@ class Watch extends HTMLElement {
             return `${x.toFixed(2)},${y.toFixed(2)}`;
         }).join(' ');
     }
-    renderWorkoutPlan() {
-        if(this.workoutIntervals.length === 0) {
-            return '<div class="video-overlay-plan-marker" style="left: 0%;"></div>';
-        }
-
+    getWorkoutTotalDuration() {
         const totalDuration = this.workoutIntervals.reduce((sum, interval) => {
             return sum + Math.max(interval?.duration ?? 0, 0);
         }, 0);
 
-        if(totalDuration <= 0) {
-            return '<div class="video-overlay-plan-marker" style="left: 0%;"></div>';
-        }
-
+        return totalDuration;
+    }
+    getElapsedBeforeCurrentInterval() {
         let elapsedBeforeCurrent = 0;
-        for(let i = 0; i < this.intervalIndex; i += 1) {
+        const currentIndex = Math.max(0, Math.min(this.intervalIndex ?? 0, this.workoutIntervals.length));
+
+        for(let i = 0; i < currentIndex; i += 1) {
             elapsedBeforeCurrent += Math.max(this.workoutIntervals[i]?.duration ?? 0, 0);
         }
 
-        const currentIntervalDuration = Math.max(this.intervalDuration ?? currentInterval?.duration ?? 0, 0);
-        const remainingInInterval = Math.max(this.lapTime ?? 0, 0);
-        const elapsedInInterval = Math.max(0, currentIntervalDuration - remainingInInterval);
+        return elapsedBeforeCurrent;
+    }
+    getCurrentIntervalDuration() {
+        const currentInterval = this.workoutIntervals[this.intervalIndex] ?? null;
+        const trackedDuration = Number(this.intervalDuration);
+        const fallbackDuration = Number(currentInterval?.duration);
+
+        if(Number.isFinite(trackedDuration) && trackedDuration > 0) return trackedDuration;
+        if(Number.isFinite(fallbackDuration) && fallbackDuration > 0) return fallbackDuration;
+        return 0;
+    }
+    getWorkoutProgressPercentage() {
+        if(this.workoutIntervals.length === 0) return 0;
+
+        const totalDuration = this.getWorkoutTotalDuration();
+        if(totalDuration <= 0) return 0;
+        if(this.workoutStatus === 'done') return 100;
+        if(this.workoutStatus !== 'started') return 0;
+
+        const elapsedBeforeCurrent = this.getElapsedBeforeCurrentInterval();
+        const currentIntervalDuration = this.getCurrentIntervalDuration();
+        const lapTime = Number(this.lapTime);
+        const remainingInInterval = Number.isFinite(lapTime)
+            ? Math.max(0, Math.min(currentIntervalDuration, lapTime))
+            : currentIntervalDuration;
+        const elapsedInInterval = currentIntervalDuration > 0
+            ? currentIntervalDuration - remainingInInterval
+            : 0;
         const absoluteElapsed = elapsedBeforeCurrent + elapsedInInterval;
-        const markerLeft = Math.max(0, Math.min(100, (absoluteElapsed / totalDuration) * 100));
+
+        return Math.max(0, Math.min(100, (absoluteElapsed / totalDuration) * 100));
+    }
+    renderWorkoutPlanSegments() {
+        if(this.workoutIntervals.length === 0) return '';
+
+        const totalDuration = this.getWorkoutTotalDuration();
+        if(totalDuration <= 0) return '';
 
         const zoneColorForTarget = (target) => {
             if(target < 0.55) return 'var(--zone-gray)';
@@ -970,7 +1032,24 @@ class Watch extends HTMLElement {
             return `<div class="video-overlay-plan-segment" style="width:${width}%;height:${height.toFixed(1)}%;background:${color};"></div>`;
         }).join('');
 
-        return `${segments}<div class="video-overlay-plan-marker" style="left:${markerLeft}%;"></div>`;
+        return segments;
+    }
+    updateWorkoutPlan() {
+        if(!this.$workoutPlan) return;
+
+        const segments = this.renderWorkoutPlanSegments();
+        if(this.workoutPlanSegmentsMarkup !== segments || !this.$workoutPlanMarker?.isConnected) {
+            this.workoutPlanSegmentsMarkup = segments;
+            this.$workoutPlan.innerHTML = `${segments}<div class="video-overlay-plan-marker"></div>`;
+            this.$workoutPlanMarker = this.$workoutPlan.querySelector('.video-overlay-plan-marker');
+        }
+
+        if(this.$workoutPlanMarker) {
+            this.$workoutPlanMarker.style.left = `${this.getWorkoutProgressPercentage()}%`;
+        }
+    }
+    renderWorkoutPlan() {
+        return `${this.renderWorkoutPlanSegments()}<div class="video-overlay-plan-marker" style="left:${this.getWorkoutProgressPercentage()}%;"></div>`;
     }
     renderCsvSelector() {
         if(!this.$csvSelector) return;
@@ -1308,6 +1387,12 @@ class Watch extends HTMLElement {
         this.updatePlaybackIndicator(rate);
     }
 
+    scaleRpeForIndicator(rpe) {
+        const squared = rpe * rpe;
+        const visualRpe = 1 + ((squared - 1) / 35) * 9;
+        return Math.min(10, visualRpe);
+    }
+
     startVideoPlayback() {
         const heroVideo = document.querySelector('#home-hero-video');
         const videoEl = this.$routeVideoEl;
@@ -1335,6 +1420,9 @@ class Watch extends HTMLElement {
         const maxRate = 5;
         const normalized = (rate - minRate) / (maxRate - minRate);
         const clamped = Math.max(0, Math.min(1, normalized));
+        const rawRpe = 1 + (clamped * 9);
+        const visualRpe = Math.max(1, Math.min(10, this.scaleRpeForIndicator(rawRpe)));
+        const visualClamped = (visualRpe - 1) / 9;
         const containerHeight = this.$rateIndicator.clientHeight || 120;
         const baseHeight = containerHeight * 0.2;
         const range = containerHeight - baseHeight;
@@ -1342,12 +1430,12 @@ class Watch extends HTMLElement {
 
         this.$rateBars.forEach((bar, index) => {
             const scale = scales[index % scales.length];
-            const height = baseHeight + (range * clamped * scale);
+            const height = baseHeight + (range * visualClamped * scale);
             bar.style.height = `${height}px`;
         });
 
         if(this.$rateValue) {
-            const rpe = Math.max(1, Math.min(10, Math.round(1 + (clamped * 9))));
+            const rpe = Math.max(1, Math.min(10, Math.round(visualRpe)));
             this.$rateValue.textContent = `${rpe}`;
         }
     }

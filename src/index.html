@@ -313,7 +313,7 @@
 
                         <div id="targets">
                             <div class="targets--cont video-target">
-                                <div id="video-csv-selector" class="video-csv-selector">
+                                <div id="video-csv-selector" class="video-csv-selector" aria-label="AI route selector">
                                     <!-- filled by watch.js -->
                                 </div>
                                 <aside id="video-motivation-panel" class="video-motivation-panel" aria-live="polite" hidden>
@@ -323,7 +323,10 @@
                                     <div id="home-hero-video" class="home-hero">
                                         <div class="home-hero-header">
                                             <h4 class="home-hero-heading">AI Routes</h4>
-                                            <span id="home-hero-route-label" class="home-hero-route"></span>
+                                            <div class="home-hero-actions">
+                                                <span id="home-hero-route-label" class="home-hero-route"></span>
+                                                <button id="route-expand-toggle" class="home-hero-expand-toggle" type="button" aria-pressed="false" aria-label="Expand AI route video">Expand</button>
+                                            </div>
                                         </div>
                                         <div class="home-hero-media">
                                             <video class="home-hero--video"
