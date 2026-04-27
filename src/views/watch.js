@@ -1366,9 +1366,9 @@ class Watch extends HTMLElement {
         const Pthr = 195;
         const HRrest = 50;
         const HRmax = 173;
-        const wp = 0.5;
-        const wh = 0.4;
-        const wc = 0.2;
+        const wp = 0.8;
+        const wh = 0.1;
+        const wc = 0.1;
 
         const pNorm = this.power1s / Pthr;
         const hNorm = (this.heartRate - HRrest) / (HRmax - HRrest);
