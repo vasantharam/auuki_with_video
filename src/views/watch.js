@@ -1364,18 +1364,8 @@ class Watch extends HTMLElement {
     }
     getPlaybackRate() {
         const Pthr = 195;
-        const HRrest = 50;
-        const HRmax = 173;
-        const wp = 0.8;
-        const wh = 0.1;
-        const wc = 0.1;
-
         const pNorm = this.power1s / Pthr;
-        const hNorm = (this.heartRate - HRrest) / (HRmax - HRrest);
-        const cNorm = this.cadence / 50;
-
-        const effort = (wp * pNorm) + (wh * hNorm) + (wc * cNorm);
-        const rate = effort * (this.currentMultiplier ?? 1);
+        const rate = pNorm * (this.currentMultiplier ?? 1);
         const clamped = Math.max(0.3, Math.min(5, rate));
         return clamped;
     }
