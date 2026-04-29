@@ -5102,7 +5102,8 @@ and (min-width: 1900px) {
     }
 }
 
-@media only screen and (max-width: 1199px), only screen and (max-height: 1399px) {
+/* Narrow screens (any height): force scrollable 1200px baseline */
+@media only screen and (max-width: 1199px) {
     #home-page {
         --home-layout-width: 1200px;
         --home-layout-height: 1400px;
@@ -5168,6 +5169,145 @@ and (min-width: 1900px) {
 
     #targets .targets--cont.video-target.route-expanded .youtube-feed {
         display: none !important;
+    }
+}
+
+/* Wide but short screens (e.g. 1920×1080 laptops): fit within actual viewport height */
+@media only screen and (min-width: 1200px) and (max-height: 1399px) {
+    #home-page {
+        --home-layout-width: 100vw;
+        --home-layout-height: 100vh;
+        --home-overlay-bottom-clearance: 0rem;
+    }
+
+    #home-page-wrapper {
+        width: 100vw !important;
+        min-width: 1200px !important;
+        min-height: 0 !important;
+        height: auto !important;
+        grid-template-columns: 100% !important;
+        grid-template-rows: minmax(0, 1fr) !important;
+    }
+
+    #targets {
+        min-height: 0 !important;
+    }
+
+    .youtube-feed {
+        display: grid !important;
+    }
+
+    .video-csv-selector {
+        position: fixed !important;
+        top: auto !important;
+        bottom: calc(var(--home-stage-bottom-offset) + 1.2rem) !important;
+        left: 1.2rem !important;
+        width: 26rem !important;
+        opacity: 0.2 !important;
+        transform: translateX(calc(-100% + 4.4rem)) !important;
+    }
+
+    .video-csv-selector.is-revealed,
+    .video-csv-selector:hover,
+    .video-csv-selector:focus-within {
+        opacity: 1 !important;
+        transform: translateX(0) !important;
+    }
+
+    .video-performance-overlay {
+        gap: 1.2rem !important;
+        padding: 1.2rem !important;
+    }
+
+    .video-overlay-graph {
+        width: min(100%, 76rem) !important;
+    }
+
+    .video-overlay-graph-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: flex-start !important;
+    }
+
+    .video-overlay-metrics {
+        grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    }
+
+    #targets .targets--cont.video-target.route-expanded #home-hero-video {
+        margin-bottom: 0 !important;
+    }
+
+    #targets .targets--cont.video-target.route-expanded .youtube-feed {
+        display: none !important;
+    }
+}
+
+/* Compact overlay for short viewports (1080p and similar) */
+@media only screen and (min-width: 1200px) and (max-height: 1099px) {
+    .home-hero-header {
+        padding: 0.7rem 0.9rem 0 !important;
+    }
+
+    .video-overlay-chip,
+    .video-overlay-chip-value {
+        min-height: 2.2rem !important;
+        padding: 0.28rem 0.6rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    .video-overlay-graph {
+        gap: 0.55rem !important;
+        padding: 0.55rem 0.85rem !important;
+    }
+
+    .video-overlay-graph-band {
+        gap: 0.4rem !important;
+    }
+
+    .video-overlay-plan {
+        height: 3.2rem !important;
+    }
+
+    .video-overlay-combined-graph {
+        height: 4.0rem !important;
+    }
+
+    .video-overlay-metrics {
+        padding: 0.68rem 1rem !important;
+    }
+
+    .video-overlay-value {
+        font-size: clamp(1.4rem, 1.6vw + 0.2rem, 3.2rem) !important;
+    }
+
+    .video-overlay-label {
+        font-size: clamp(0.9rem, 0.45vw + 0.55rem, 1.4rem) !important;
+    }
+}
+
+/* Extra compact for very short screens (sub-900px height) */
+@media only screen and (min-width: 1200px) and (max-height: 899px) {
+    .video-overlay-chip,
+    .video-overlay-chip-value {
+        min-height: 2.0rem !important;
+        font-size: 0.84rem !important;
+    }
+
+    .video-overlay-plan {
+        height: 2.8rem !important;
+    }
+
+    .video-overlay-combined-graph {
+        height: 3.4rem !important;
+    }
+
+    .video-overlay-graph {
+        gap: 0.45rem !important;
+        padding: 0.45rem 0.75rem !important;
+    }
+
+    .video-overlay-metrics {
+        padding: 0.55rem 0.85rem !important;
     }
 }
 /* END Media Queries */

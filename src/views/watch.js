@@ -74,6 +74,8 @@ class Watch extends HTMLElement {
         this.routeVideoLoading = false;
         this.routeLap = 1;
         this.currentMultiplier = 1;
+        this.routeManifestMultiplier = 1;
+        this.routeContinuousProgress = 0;
         this.routeSingleColumnBreakpoint = 1100;
         this.layoutBaselineWidth = 1200;
         this.layoutBaselineHeight = 1400;
@@ -332,6 +334,12 @@ class Watch extends HTMLElement {
             this.syncRouteAspectRatioFromVideo(event.currentTarget);
             this.updateRouteVideoLoadingProgress(event.currentTarget);
             this.updateResponsiveLayout();
+            if(this.routeVideoSrc) {
+                const duration = event.currentTarget.duration;
+                if(Number.isFinite(duration) && duration > 0) {
+                    this.rebuildVirtualSegments(duration);
+                }
+            }
         }
     }
     onRouteVideoLoadStart(event) {
@@ -369,7 +377,13 @@ class Watch extends HTMLElement {
     }
     onVideoTimeUpdate(event) {
         if(!this.routeVideoSrc || this.routeSegmentEnds.length === 0) return;
-        const currentTime = event.currentTarget.currentTime ?? 0;
+        const videoEl = event.currentTarget;
+        const currentTime = videoEl.currentTime ?? 0;
+        const totalDuration = videoEl.duration;
+        if(Number.isFinite(totalDuration) && totalDuration > 0) {
+            this.routeContinuousProgress = currentTime / totalDuration;
+            this.updateRouteSvgProgress();
+        }
         let nextIndex = this.routeSegmentEnds.findIndex(endTime => currentTime < endTime);
         if(nextIndex < 0) {
             nextIndex = Math.max(0, this.routeSegmentEnds.length - 1);
@@ -802,7 +816,7 @@ class Watch extends HTMLElement {
         this.$heroVideo.style.removeProperty('flex');
     }
     isLayoutBaselineLocked() {
-        return window.innerWidth < this.layoutBaselineWidth || window.innerHeight < this.layoutBaselineHeight;
+        return window.innerWidth < this.layoutBaselineWidth;
     }
     updateResponsiveLayout() {
         if(!this.$videoStage || !this.$youtubeFeed || !this.$heroVideo) return;
@@ -1145,21 +1159,48 @@ class Watch extends HTMLElement {
 
         const total = this.videoSources.length;
         const currentIndex = total > 0 ? this.videoIndex % total : 0;
-        const progress = total > 0 ? currentIndex / total : 0;
 
         this.syncRouteLabels();
         if(this.$routeProgressCount) {
-            this.$routeProgressCount.textContent = total > 0 ? `${currentIndex + 1} / ${total}` : '0 / 0';
+            this.$routeProgressCount.textContent = total > 0 ? `${currentIndex + 1} / ${total}` : '-- / --';
         }
+        if(this.routeVideoSrc) {
+            this.updateRouteSvgProgress();
+        } else {
+            const progress = total > 0 ? currentIndex / total : 0;
+            this.setRouteSvgProgress(progress);
+        }
+    }
+    updateRouteSvgProgress() {
+        this.setRouteSvgProgress(this.routeContinuousProgress ?? 0);
+    }
+    setRouteSvgProgress(progress) {
         if(this.$routeProgressFill) {
-            this.$routeProgressFill.style.strokeDasharray = `${progress * 100} 100`;
+            this.$routeProgressFill.style.strokeDasharray = `${(progress * 100).toFixed(2)} 100`;
         }
         if(this.$routeProgressTrack && this.$routeProgressMarker) {
-            const totalLength = this.$routeProgressTrack.getTotalLength();
-            const point = this.$routeProgressTrack.getPointAtLength(totalLength * progress);
-            this.$routeProgressMarker.setAttribute('cx', `${point.x}`);
-            this.$routeProgressMarker.setAttribute('cy', `${point.y}`);
+            try {
+                const totalLength = this.$routeProgressTrack.getTotalLength();
+                const point = this.$routeProgressTrack.getPointAtLength(totalLength * progress);
+                this.$routeProgressMarker.setAttribute('cx', `${point.x}`);
+                this.$routeProgressMarker.setAttribute('cy', `${point.y}`);
+            } catch(e) { /* SVG not ready */ }
         }
+    }
+    rebuildVirtualSegments(totalDuration) {
+        const segmentSecs = 15;
+        const count = Math.max(1, Math.ceil(totalDuration / segmentSecs));
+        const multiplier = this.routeManifestMultiplier ?? 1;
+        this.videoSources = Array.from({length: count}, () => ({
+            src: this.routeVideoSrc,
+            multiplier,
+        }));
+        this.routeSegmentEnds = Array.from({length: count}, (_, i) =>
+            Math.min((i + 1) * segmentSecs, totalDuration)
+        );
+        if(this.videoIndex >= count) this.videoIndex = 0;
+        this.updateRouteProgress();
+        this.renderOverlayGraph();
     }
     async loadCsvOptions() {
         const nextOptions = [];
@@ -1211,21 +1252,16 @@ class Watch extends HTMLElement {
         try {
             const combinedEntry = await this.loadCombinedRouteEntry(csvName);
             if(combinedEntry) {
-                this.videoSources = (combinedEntry.segments ?? []).map(segment => ({
-                    ...segment,
-                    src: this.resolveVideoAsset(segment.src),
-                }));
                 this.routeVideoSrc = combinedEntry.src ? this.resolveVideoAsset(combinedEntry.src) : null;
+                this.routeManifestMultiplier = combinedEntry.multiplier ?? 1;
                 this.setHeroAspectRatio(combinedEntry.width, combinedEntry.height);
+                // Virtual 15-second segments built from actual video duration in onVideoLoadedMetadata
+                this.videoSources = [];
                 this.routeSegmentEnds = [];
-                let elapsed = 0;
-                this.videoSources.forEach(segment => {
-                    elapsed += Math.max(segment.duration ?? 0, 0);
-                    this.routeSegmentEnds.push(elapsed);
-                });
                 this.videoIndex = 0;
                 this.routeLap = 1;
-                this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
+                this.routeContinuousProgress = 0;
+                this.currentMultiplier = this.routeManifestMultiplier;
                 this.prefetchLinks.forEach(l => l.remove());
                 this.prefetchLinks = [];
                 this.updateRouteProgress();
@@ -1322,6 +1358,7 @@ class Watch extends HTMLElement {
             if(this.routeVideoSrc) {
                 this.routeLap += 1;
                 this.videoIndex = 0;
+                this.routeContinuousProgress = 0;
                 this.currentMultiplier = this.videoSources[0]?.multiplier ?? 1;
                 this.updateRouteProgress();
                 this.renderOverlayGraph();
