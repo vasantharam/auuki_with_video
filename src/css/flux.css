@@ -5244,6 +5244,11 @@ and (min-width: 1900px) {
 
 /* Compact overlay for short viewports (1080p and similar) */
 @media only screen and (min-width: 1200px) and (max-height: 1099px) {
+    /* Ensure bottom clearance so content never hides behind the fixed bar */
+    #home-page-wrapper {
+        padding-bottom: var(--home-stage-bottom-offset) !important;
+    }
+
     .home-hero-header {
         padding: 0.7rem 0.9rem 0 !important;
     }
@@ -5255,25 +5260,41 @@ and (min-width: 1900px) {
         font-size: 0.9rem !important;
     }
 
+    .video-performance-overlay {
+        gap: 0.8rem !important;
+        padding: 0.8rem !important;
+    }
+
     .video-overlay-graph {
-        gap: 0.55rem !important;
-        padding: 0.55rem 0.85rem !important;
+        gap: 0.45rem !important;
+        padding: 0.45rem 0.85rem !important;
     }
 
     .video-overlay-graph-band {
-        gap: 0.4rem !important;
+        gap: 0.35rem !important;
     }
 
     .video-overlay-plan {
-        height: 3.2rem !important;
+        height: 2.8rem !important;
+    }
+
+    /* Power and Heart Rate graphs side by side to save vertical space */
+    .video-overlay-live-graphs {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: clamp(0.4rem, 0.6vw, 0.7rem) !important;
     }
 
     .video-overlay-combined-graph {
-        height: 4.0rem !important;
+        height: 3.6rem !important;
+    }
+
+    /* Shrink route progress figure so utility row is less tall */
+    .video-route-progress-figure {
+        height: 3.6rem !important;
     }
 
     .video-overlay-metrics {
-        padding: 0.68rem 1rem !important;
+        padding: 0.6rem 1rem !important;
     }
 
     .video-overlay-value {
@@ -5293,21 +5314,30 @@ and (min-width: 1900px) {
         font-size: 0.84rem !important;
     }
 
-    .video-overlay-plan {
-        height: 2.8rem !important;
-    }
-
-    .video-overlay-combined-graph {
-        height: 3.4rem !important;
+    .video-performance-overlay {
+        gap: 0.6rem !important;
+        padding: 0.6rem !important;
     }
 
     .video-overlay-graph {
-        gap: 0.45rem !important;
-        padding: 0.45rem 0.75rem !important;
+        gap: 0.35rem !important;
+        padding: 0.35rem 0.75rem !important;
+    }
+
+    .video-overlay-plan {
+        height: 2.4rem !important;
+    }
+
+    .video-overlay-combined-graph {
+        height: 3.0rem !important;
+    }
+
+    .video-route-progress-figure {
+        height: 3.0rem !important;
     }
 
     .video-overlay-metrics {
-        padding: 0.55rem 0.85rem !important;
+        padding: 0.5rem 0.85rem !important;
     }
 }
 /* END Media Queries */
